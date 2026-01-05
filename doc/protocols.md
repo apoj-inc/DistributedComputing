@@ -39,7 +39,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 
 ### 3.1 Agent
 - `agent_id` (string, required)
-- `os` (string, required; значения: `linux`, `windows`)
+- `os` (string, required; ожидаемые значения: `linux`, `windows`, но сервер не валидирует)
 - `version` (string, required)
 - `resources` (object, required)
   - `cpu_cores` (int)
@@ -56,7 +56,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 - `env` (object string->string)
 - `timeout_sec` (int)
 - `constraints` (object)
-  - `os` (string, optional)
+  - `os` (string, optional; сопоставляется с `agent.os` без валидации)
   - `cpu_cores` (int, optional)
   - `ram_mb` (int, optional)
   - `labels` (array[string], optional)
@@ -95,12 +95,11 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 Тело запроса:
 ```
 {
-  "status": "idle",
-  "running_tasks": ["task-1", "task-2"],
-  "free_slots": 1,
-  "timestamp": "2025-01-04T08:57:00Z"
+  "status": "idle"
 }
 ```
+Дополнительные поля допустимы и игнорируются сервером. Разрешённые значения `status`:
+`idle`, `busy`, `offline`.
 
 Ответ `200`:
 ```
@@ -144,6 +143,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
   "error_message": ""
 }
 ```
+Допустимые значения `state`: `queued`, `running`, `succeeded`, `failed`, `canceled`.
 
 Ответ `200`:
 ```
@@ -158,6 +158,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 Тело запроса:
 ```
 {
+  "task_id": "task-123",
   "command": "solver",
   "args": ["--size", "1000"],
   "env": { "OMP_NUM_THREADS": "4" },
@@ -222,13 +223,16 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 ```
 <текст логов>
 ```
+Параметр `stream` опционален (по умолчанию `stdout`).
 
 ### 7.2 Потоковый вывод логов
 `GET /api/v1/tasks/{task_id}/logs:tail?stream=stderr&from=0`
 
 Ответ `200` (chunked):
 - Порции текста с постепенным обновлением.
-- Параметр `from` используется как смещение в байтах.
+- Параметр `stream` опционален (по умолчанию `stdout`).
+- Параметр `from` используется как смещение в байтах (по умолчанию `0`).
+- Заголовок ответа `X-Log-Size` содержит текущий размер лога в байтах.
 
 ## 8. Ошибки
 

@@ -398,7 +398,7 @@ std::optional<std::vector<TaskDispatch>> Storage::PollTasksForAgent(
         "AND (c.cpu_cores IS NULL OR c.cpu_cores <= $2) "
         "AND (c.ram_mb IS NULL OR c.ram_mb <= $3) "
         "ORDER BY t.created_at "
-        "FOR UPDATE SKIP LOCKED "
+        "FOR UPDATE OF t SKIP LOCKED "
         "LIMIT $4",
         agent_os,
         agent_cpu,

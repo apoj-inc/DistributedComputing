@@ -11,9 +11,11 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -637,6 +639,220 @@ TEST_F(MasterIntegrationTest, RegisterAgentValidation) {
     EXPECT_FALSE(state.db->HasAgent(agent_id));
 }
 
+TEST_F(MasterIntegrationTest, RegisterAgentInvalidJson) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_bad_json");
+    auto res = client->Put("/api/v1/agents/" + agent_id, "{",
+                           "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+    EXPECT_FALSE(state.db->HasAgent(agent_id));
+}
+
+TEST_F(MasterIntegrationTest, RegisterAgentInvalidResources) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_bad_res");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", "four"}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    auto res = client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                           "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+    EXPECT_FALSE(state.db->HasAgent(agent_id));
+
+    std::string agent_id2 = MakeId("agent_bad_res");
+    json payload2 = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}}},
+    };
+    res = client->Put("/api/v1/agents/" + agent_id2, payload2.dump(),
+                      "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+    EXPECT_FALSE(state.db->HasAgent(agent_id2));
+}
+
+TEST_F(MasterIntegrationTest, RegisterAgentUpsertResetsStatus) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_upsert");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 4}, {"ram_mb", 2048}, {"slots", 2}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+
+    json heartbeat = {{"status", "busy"}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/heartbeat",
+                              heartbeat.dump(), "application/json"), 200);
+    EXPECT_EQ(state.db->GetAgentStatusLower(agent_id), "busy");
+
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+    EXPECT_EQ(state.db->GetAgentStatusLower(agent_id), "idle");
+}
+
+TEST_F(MasterIntegrationTest, HeartbeatUnknownAgent) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_missing");
+    json heartbeat = {{"status", "idle"}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/heartbeat",
+                            heartbeat.dump(), "application/json");
+    ExpectErrorCode(res, 404, "AGENT_NOT_FOUND");
+    EXPECT_FALSE(state.db->HasAgent(agent_id));
+}
+
+TEST_F(MasterIntegrationTest, HeartbeatInvalidJson) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_bad_heartbeat_json");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/heartbeat", "{",
+                            "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, HeartbeatInvalidStatus) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_bad_status");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+
+    json heartbeat = {{"status", "unknown"}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/heartbeat",
+                            heartbeat.dump(), "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, HeartbeatOfflineAccepted) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_offline");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+
+    json heartbeat = {{"status", "offline"}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/heartbeat",
+                              heartbeat.dump(), "application/json"), 200);
+    EXPECT_EQ(state.db->GetAgentStatusLower(agent_id), "offline");
+}
+
+TEST_F(MasterIntegrationTest, PollUnknownAgent) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_missing");
+    json poll = {{"free_slots", 1}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll.dump(), "application/json");
+    ExpectErrorCode(res, 404, "AGENT_NOT_FOUND");
+    EXPECT_FALSE(state.db->HasAgent(agent_id));
+}
+
+TEST_F(MasterIntegrationTest, PollInvalidFreeSlots) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_poll_invalid");
+    json payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, payload.dump(),
+                             "application/json"), 200);
+
+    json poll_missing = json::object();
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll_missing.dump(), "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+
+    json poll_invalid = {{"free_slots", "two"}};
+    res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                       poll_invalid.dump(), "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, PollFreeSlotsZeroAndNegative) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_poll_zero");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_id = MakeId("task_poll_zero");
+    json task_payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
+                              "application/json"), 201);
+
+    json poll_zero = {{"free_slots", 0}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll_zero.dump(), "application/json");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    EXPECT_EQ(body["tasks"].size(), 0);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_id).has_value());
+    EXPECT_EQ(state.db->GetAgentStatusLower(agent_id), "idle");
+
+    json poll_negative = {{"free_slots", -1}};
+    res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                       poll_negative.dump(), "application/json");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    body = json::parse(res->body);
+    EXPECT_EQ(body["tasks"].size(), 0);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_id).has_value());
+    EXPECT_EQ(state.db->GetAgentStatusLower(agent_id), "idle");
+}
+
+TEST_F(MasterIntegrationTest, ListAgentsInvalidStatus) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    auto res = client->Get("/api/v1/agents?status=unknown");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
 TEST_F(MasterIntegrationTest, ListAgentsByStatus) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -693,6 +909,15 @@ TEST_F(MasterIntegrationTest, GetAgentDetails) {
     EXPECT_EQ(body["agent"]["status"], "idle");
 }
 
+TEST_F(MasterIntegrationTest, GetAgentUnknown) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_missing_detail");
+    auto res = client->Get("/api/v1/agents/" + agent_id);
+    ExpectErrorCode(res, 404, "AGENT_NOT_FOUND");
+}
+
 TEST_F(MasterIntegrationTest, SubmitTaskAndGet) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -726,6 +951,101 @@ TEST_F(MasterIntegrationTest, SubmitTaskAndGet) {
 
     res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
     ExpectErrorCode(res, 409, "TASK_EXISTS");
+}
+
+TEST_F(MasterIntegrationTest, SubmitTaskMissingFields) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    json payload_missing_id = {{"command", "echo"}};
+    auto res = client->Post("/api/v1/tasks", payload_missing_id.dump(),
+                            "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+
+    json payload_missing_command = {{"task_id", MakeId("task_missing_cmd")}};
+    res = client->Post("/api/v1/tasks", payload_missing_command.dump(),
+                       "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, SubmitTaskInvalidTypesIgnored) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_bad_types");
+    json payload = {
+        {"task_id", task_id},
+        {"command", "echo"},
+        {"args", "not-array"},
+        {"env", json::array({"BAD"})},
+        {"timeout_sec", "fast"},
+        {"constraints", "nope"},
+    };
+    auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
+    ExpectStatus(res, 201);
+
+    res = client->Get("/api/v1/tasks/" + task_id);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    ASSERT_TRUE(body.contains("task"));
+    EXPECT_TRUE(body["task"]["args"].is_array());
+    EXPECT_EQ(body["task"]["args"].size(), 0);
+    EXPECT_TRUE(body["task"]["env"].is_object());
+    EXPECT_EQ(body["task"]["env"].size(), 0);
+    EXPECT_TRUE(body["task"]["constraints"].is_object());
+    EXPECT_EQ(body["task"]["constraints"].size(), 0);
+    EXPECT_FALSE(body["task"].contains("timeout_sec"));
+}
+
+TEST_F(MasterIntegrationTest, SubmitTaskLabelsSaved) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_labels");
+    json payload = {
+        {"task_id", task_id},
+        {"command", "echo"},
+        {"constraints", {{"labels", json::array({"gpu", "ssd"})}}},
+    };
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    auto res = client->Get("/api/v1/tasks/" + task_id);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    ASSERT_TRUE(body.contains("task"));
+    ASSERT_TRUE(body["task"]["constraints"].contains("labels"));
+    EXPECT_EQ(body["task"]["constraints"]["labels"], json::array({"gpu", "ssd"}));
+}
+
+TEST_F(MasterIntegrationTest, SubmitTaskInvalidId) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = "bad$id";
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "");
+}
+
+TEST_F(MasterIntegrationTest, GetTaskInvalidId) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    auto res = client->Get("/api/v1/tasks/bad$id");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, GetTaskUnknown) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_missing_get");
+    auto res = client->Get("/api/v1/tasks/" + task_id);
+    ExpectErrorCode(res, 404, "TASK_NOT_FOUND");
 }
 
 TEST_F(MasterIntegrationTest, ListTasksByState) {
@@ -769,6 +1089,64 @@ TEST_F(MasterIntegrationTest, ListTasksByState) {
               queued_body["tasks"][0]["task_id"]);
 }
 
+TEST_F(MasterIntegrationTest, ListTasksByAgentPagination) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_tasks");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 1024}, {"slots", 2}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_id1 = MakeId("task_agent");
+    json payload1 = {{"task_id", task_id1}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload1.dump(),
+                              "application/json"), 201);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::string task_id2 = MakeId("task_agent");
+    json payload2 = {{"task_id", task_id2}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload2.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 2}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                              poll.dump(), "application/json"), 200);
+
+    auto res = client->Get("/api/v1/tasks?agent_id=" + agent_id +
+                           "&limit=1&offset=0");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    ASSERT_EQ(body["tasks"].size(), 1);
+    EXPECT_EQ(body["tasks"][0]["task_id"], task_id2);
+
+    res = client->Get("/api/v1/tasks?agent_id=" + agent_id +
+                      "&limit=1&offset=1");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    body = json::parse(res->body);
+    ASSERT_EQ(body["tasks"].size(), 1);
+    EXPECT_EQ(body["tasks"][0]["task_id"], task_id1);
+
+    res = client->Get("/api/v1/tasks?agent_id=" + agent_id + "&state=running");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    body = json::parse(res->body);
+    ASSERT_EQ(body["tasks"].size(), 2);
+}
+
+TEST_F(MasterIntegrationTest, ListTasksInvalidState) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    auto res = client->Get("/api/v1/tasks?state=unknown");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
 TEST_F(MasterIntegrationTest, TaskStatusTransitionValidation) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -782,6 +1160,66 @@ TEST_F(MasterIntegrationTest, TaskStatusTransitionValidation) {
                             status.dump(), "application/json");
     ExpectErrorCode(res, 409, "INVALID_STATE_TRANSITION");
     EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
+}
+
+TEST_F(MasterIntegrationTest, TaskStatusUnknownTask) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_missing");
+    json status = {{"state", "running"}};
+    auto res = client->Post("/api/v1/tasks/" + task_id + "/status",
+                            status.dump(), "application/json");
+    ExpectErrorCode(res, 404, "TASK_NOT_FOUND");
+}
+
+TEST_F(MasterIntegrationTest, TaskStatusIdempotentQueued) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_queued");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    json status = {{"state", "queued"}};
+    auto res = client->Post("/api/v1/tasks/" + task_id + "/status",
+                            status.dump(), "application/json");
+    ExpectStatus(res, 200);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
+}
+
+TEST_F(MasterIntegrationTest, TaskStatusUpdatesTimestampsAndError) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_failed");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    json running = {{"state", "running"}, {"started_at", "2025-01-04T09:00:00Z"}};
+    ExpectStatus(client->Post("/api/v1/tasks/" + task_id + "/status",
+                              running.dump(), "application/json"), 200);
+
+    json failed = {
+        {"state", "failed"},
+        {"exit_code", 42},
+        {"finished_at", "2025-01-04T09:10:00Z"},
+        {"error_message", "boom"},
+    };
+    ExpectStatus(client->Post("/api/v1/tasks/" + task_id + "/status",
+                              failed.dump(), "application/json"), 200);
+
+    auto res = client->Get("/api/v1/tasks/" + task_id);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    EXPECT_EQ(body["task"]["state"], "failed");
+    EXPECT_EQ(body["task"]["exit_code"], 42);
+    EXPECT_EQ(body["task"]["error_message"], "boom");
+    EXPECT_EQ(body["task"]["started_at"], "2025-01-04T09:00:00Z");
+    EXPECT_EQ(body["task"]["finished_at"], "2025-01-04T09:10:00Z");
 }
 
 TEST_F(MasterIntegrationTest, PollAssignsAndCompletesTasks) {
@@ -847,6 +1285,215 @@ TEST_F(MasterIntegrationTest, PollAssignsAndCompletesTasks) {
     EXPECT_NE(body["tasks"][0]["task_id"], assigned_task);
 }
 
+TEST_F(MasterIntegrationTest, PollTasksRespectsConstraints) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_constraints");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 1024}, {"slots", 2}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_os = MakeId("task_os");
+    std::string task_cpu = MakeId("task_cpu");
+    std::string task_ram = MakeId("task_ram");
+    json payload_os = {
+        {"task_id", task_os},
+        {"command", "echo"},
+        {"constraints", {{"os", "windows"}}},
+    };
+    json payload_cpu = {
+        {"task_id", task_cpu},
+        {"command", "echo"},
+        {"constraints", {{"cpu_cores", 4}}},
+    };
+    json payload_ram = {
+        {"task_id", task_ram},
+        {"command", "echo"},
+        {"constraints", {{"ram_mb", 2048}}},
+    };
+    ExpectStatus(client->Post("/api/v1/tasks", payload_os.dump(),
+                              "application/json"), 201);
+    ExpectStatus(client->Post("/api/v1/tasks", payload_cpu.dump(),
+                              "application/json"), 201);
+    ExpectStatus(client->Post("/api/v1/tasks", payload_ram.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 3}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll.dump(), "application/json");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    EXPECT_EQ(body["tasks"].size(), 0);
+
+    EXPECT_EQ(state.db->GetTaskStateLower(task_os), "queued");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_cpu), "queued");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_ram), "queued");
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_os).has_value());
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_cpu).has_value());
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_ram).has_value());
+}
+
+TEST_F(MasterIntegrationTest, PollTasksHonorsFreeSlotLimit) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_slots");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 4}, {"ram_mb", 2048}, {"slots", 2}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task1 = MakeId("task_slots");
+    std::string task2 = MakeId("task_slots");
+    std::string task3 = MakeId("task_slots");
+    json payload = {{"command", "echo"}};
+    payload["task_id"] = task1;
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+    payload["task_id"] = task2;
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+    payload["task_id"] = task3;
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 2}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll.dump(), "application/json");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    EXPECT_EQ(body["tasks"].size(), 2);
+
+    int running = 0;
+    running += (state.db->GetTaskStateLower(task1) == "running");
+    running += (state.db->GetTaskStateLower(task2) == "running");
+    running += (state.db->GetTaskStateLower(task3) == "running");
+    int queued = 0;
+    queued += (state.db->GetTaskStateLower(task1) == "queued");
+    queued += (state.db->GetTaskStateLower(task2) == "queued");
+    queued += (state.db->GetTaskStateLower(task3) == "queued");
+    EXPECT_EQ(running, 2);
+    EXPECT_EQ(queued, 1);
+}
+
+TEST_F(MasterIntegrationTest, PollTasksFifoOrder) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_fifo");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 1024}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_first = MakeId("task_fifo");
+    json payload = {{"task_id", task_first}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::string task_second = MakeId("task_fifo");
+    payload["task_id"] = task_second;
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 1}};
+    auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                            poll.dump(), "application/json");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    ASSERT_EQ(body["tasks"].size(), 1);
+    EXPECT_EQ(body["tasks"][0]["task_id"], task_first);
+}
+
+TEST_F(MasterIntegrationTest, PollTasksNoDoubleAssignment) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent1 = MakeId("agent_dual");
+    std::string agent2 = MakeId("agent_dual");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 1024}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent1, agent_payload.dump(),
+                             "application/json"), 200);
+    ExpectStatus(client->Put("/api/v1/agents/" + agent2, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_id = MakeId("task_dual");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    auto poll_fn = [&](const std::string& agent_id) {
+        auto thread_client = MakeClient(state.config);
+        json poll = {{"free_slots", 1}};
+        auto res = thread_client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                                       poll.dump(), "application/json");
+        std::vector<std::string> tasks;
+        if (res && res->status == 200) {
+            auto body = json::parse(res->body);
+            for (const auto& item : body["tasks"]) {
+                tasks.push_back(item["task_id"].get<std::string>());
+            }
+        }
+        return tasks;
+    };
+
+    std::promise<void> start_signal;
+    auto start_future = start_signal.get_future().share();
+    std::promise<std::vector<std::string>> result1;
+    std::promise<std::vector<std::string>> result2;
+    auto future1 = result1.get_future();
+    auto future2 = result2.get_future();
+
+    std::thread t1([&]() {
+        start_future.wait();
+        try {
+            result1.set_value(poll_fn(agent1));
+        } catch (...) {
+            result1.set_value({});
+        }
+    });
+    std::thread t2([&]() {
+        start_future.wait();
+        try {
+            result2.set_value(poll_fn(agent2));
+        } catch (...) {
+            result2.set_value({});
+        }
+    });
+
+    start_signal.set_value();
+    t1.join();
+    t2.join();
+
+    auto tasks1 = future1.get();
+    auto tasks2 = future2.get();
+    std::set<std::string> combined;
+    combined.insert(tasks1.begin(), tasks1.end());
+    combined.insert(tasks2.begin(), tasks2.end());
+
+    EXPECT_EQ(tasks1.size() + tasks2.size(), 1u);
+    EXPECT_EQ(combined.size(), 1u);
+    EXPECT_EQ(state.db->CountAssignments(task_id, true), 1);
+}
+
 TEST_F(MasterIntegrationTest, CancelTask) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -883,6 +1530,49 @@ TEST_F(MasterIntegrationTest, CancelTask) {
     ExpectErrorCode(res, 409, "TASK_INVALID_STATE");
 }
 
+TEST_F(MasterIntegrationTest, CancelRunningTaskReleasesAssignment) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_cancel_run");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_id = MakeId("task_cancel_run");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 1}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                              poll.dump(), "application/json"), 200);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "running");
+    EXPECT_EQ(state.db->CountAssignments(task_id, true), 1);
+
+    auto res = client->Post("/api/v1/tasks/" + task_id + "/cancel", "",
+                            "application/json");
+    ExpectStatus(res, 200);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "canceled");
+    EXPECT_EQ(state.db->GetTaskErrorMessage(task_id).value_or(""), "canceled_by_user");
+    EXPECT_EQ(state.db->CountAssignments(task_id, true), 0);
+    EXPECT_EQ(state.db->GetAssignmentReason(task_id).value_or(""), "canceled_by_user");
+}
+
+TEST_F(MasterIntegrationTest, CancelTaskUnknown) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_missing_cancel");
+    auto res = client->Post("/api/v1/tasks/" + task_id + "/cancel", "",
+                            "application/json");
+    ExpectErrorCode(res, 404, "TASK_NOT_FOUND");
+}
+
 TEST_F(MasterIntegrationTest, LogsEndpoints) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -894,17 +1584,24 @@ TEST_F(MasterIntegrationTest, LogsEndpoints) {
     std::filesystem::path task_dir =
         std::filesystem::path(state.config.log_dir) / task_id;
     std::filesystem::create_directories(task_dir);
+    const std::string stdout_content = "hello stdout\n";
+    const std::string stderr_content = "hello stderr\n";
     std::ofstream stdout_file(task_dir / "stdout.log");
-    stdout_file << "hello stdout\n";
+    stdout_file << stdout_content;
     std::ofstream stderr_file(task_dir / "stderr.log");
-    stderr_file << "hello stderr\n";
+    stderr_file << stderr_content;
     stdout_file.close();
     stderr_file.close();
 
-    auto res = client->Get("/api/v1/tasks/" + task_id + "/logs?stream=stdout");
+    auto res = client->Get("/api/v1/tasks/" + task_id + "/logs");
     ASSERT_TRUE(res);
     ASSERT_EQ(res->status, 200);
-    EXPECT_EQ(res->body, "hello stdout\n");
+    EXPECT_EQ(res->body, stdout_content);
+
+    res = client->Get("/api/v1/tasks/" + task_id + "/logs?stream=stderr");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    EXPECT_EQ(res->body, stderr_content);
 
     res = client->Get("/api/v1/tasks/" + task_id + "/logs:tail?stream=stdout&from=6");
     ASSERT_TRUE(res);
@@ -918,6 +1615,117 @@ TEST_F(MasterIntegrationTest, LogsEndpoints) {
 
     std::filesystem::path meta_path = task_dir / "meta.json";
     EXPECT_TRUE(std::filesystem::exists(meta_path));
+    std::ifstream meta_file(meta_path);
+    ASSERT_TRUE(meta_file.is_open());
+    json meta = json::parse(meta_file);
+    EXPECT_EQ(meta["task_id"], task_id);
+    EXPECT_TRUE(meta["stdout"]["exists"].get<bool>());
+    EXPECT_TRUE(meta["stderr"]["exists"].get<bool>());
+    EXPECT_EQ(meta["stdout"]["size_bytes"], stdout_content.size());
+    EXPECT_EQ(meta["stderr"]["size_bytes"], stderr_content.size());
+}
+
+TEST_F(MasterIntegrationTest, LogsNotFound) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_logs_missing");
+    auto res = client->Get("/api/v1/tasks/" + task_id + "/logs?stream=stdout");
+    ExpectErrorCode(res, 404, "LOG_NOT_FOUND");
+}
+
+TEST_F(MasterIntegrationTest, LogsTailBeyondSize) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_tail");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    std::filesystem::path task_dir =
+        std::filesystem::path(state.config.log_dir) / task_id;
+    std::filesystem::create_directories(task_dir);
+    const std::string content = "hello";
+    std::ofstream stdout_file(task_dir / "stdout.log");
+    stdout_file << content;
+    stdout_file.close();
+
+    auto res = client->Get("/api/v1/tasks/" + task_id +
+                           "/logs:tail?stream=stdout&from=999");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(res->body, "");
+    EXPECT_EQ(res->get_header_value("X-Log-Size"),
+              std::to_string(content.size()));
+}
+
+TEST_F(MasterIntegrationTest, LogsTailInvalidFrom) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string task_id = MakeId("task_tail_invalid");
+    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
+                              "application/json"), 201);
+
+    std::filesystem::path task_dir =
+        std::filesystem::path(state.config.log_dir) / task_id;
+    std::filesystem::create_directories(task_dir);
+    const std::string content = "hello";
+    std::ofstream stdout_file(task_dir / "stdout.log");
+    stdout_file << content;
+    stdout_file.close();
+
+    auto res = client->Get("/api/v1/tasks/" + task_id +
+                           "/logs:tail?stream=stdout&from=abc");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_EQ(res->body, content);
+    EXPECT_EQ(res->get_header_value("X-Log-Size"),
+              std::to_string(content.size()));
+}
+
+TEST_F(MasterIntegrationTest, LogsInvalidTaskId) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    auto res = client->Get("/api/v1/tasks/bad$id/logs?stream=stdout");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+
+    res = client->Get("/api/v1/tasks/bad$id/logs:tail?stream=stdout&from=0");
+    ExpectErrorCode(res, 400, "BAD_REQUEST");
+}
+
+TEST_F(MasterIntegrationTest, MaintenanceKeepsFreshAgent) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    std::string agent_id = MakeId("agent_active");
+    json agent_payload = {
+        {"os", "linux"},
+        {"version", "1.0"},
+        {"resources", {{"cpu_cores", 2}, {"ram_mb", 512}, {"slots", 1}}},
+    };
+    ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
+                             "application/json"), 200);
+
+    std::string task_id = MakeId("task_active");
+    json task_payload = {{"task_id", task_id}, {"command", "echo"}};
+    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
+                              "application/json"), 201);
+
+    json poll = {{"free_slots", 1}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
+                              poll.dump(), "application/json"), 200);
+
+    json heartbeat = {{"status", "busy"}};
+    ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/heartbeat",
+                              heartbeat.dump(), "application/json"), 200);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_NE(state.db->GetAgentStatusLower(agent_id), "offline");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "running");
 }
 
 TEST_F(MasterIntegrationTest, MaintenanceRequeuesOfflineAgent) {
@@ -933,32 +1741,42 @@ TEST_F(MasterIntegrationTest, MaintenanceRequeuesOfflineAgent) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id = MakeId("task_offline");
+    std::string task_id1 = MakeId("task_offline");
+    std::string task_id2 = MakeId("task_offline");
     json task_payload = {
-        {"task_id", task_id},
         {"command", "echo"},
         {"constraints", {{"os", "linux"}}},
     };
+    task_payload["task_id"] = task_id1;
+    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
+                              "application/json"), 201);
+    task_payload["task_id"] = task_id2;
     ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
                               "application/json"), 201);
 
-    json poll = {{"free_slots", 1}};
+    json poll = {{"free_slots", 2}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
                               poll.dump(), "application/json"), 200);
-    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "running");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id1), "running");
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id2), "running");
 
     state.db->SetAgentHeartbeatAge(agent_id, 5);
 
     bool requeued = WaitForCondition([&]() {
         return state.db->GetAgentStatusLower(agent_id) == "offline" &&
-               state.db->GetTaskStateLower(task_id) == "queued";
+               state.db->GetTaskStateLower(task_id1) == "queued" &&
+               state.db->GetTaskStateLower(task_id2) == "queued";
     }, std::chrono::seconds(15));
     ASSERT_TRUE(requeued);
 
-    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_id).has_value());
-    EXPECT_EQ(state.db->GetTaskErrorMessage(task_id).value_or(""),
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_id1).has_value());
+    EXPECT_FALSE(state.db->GetTaskAssignedAgent(task_id2).has_value());
+    EXPECT_EQ(state.db->GetTaskErrorMessage(task_id1).value_or(""),
               "agent_offline_requeued");
-    EXPECT_EQ(state.db->GetAssignmentReason(task_id).value_or(""), "agent_offline");
+    EXPECT_EQ(state.db->GetTaskErrorMessage(task_id2).value_or(""),
+              "agent_offline_requeued");
+    EXPECT_EQ(state.db->GetAssignmentReason(task_id1).value_or(""), "agent_offline");
+    EXPECT_EQ(state.db->GetAssignmentReason(task_id2).value_or(""), "agent_offline");
 }
 
 }  // namespace

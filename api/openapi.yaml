@@ -18,13 +18,11 @@ paths:
           name: limit
           schema:
             type: integer
-            minimum: 1
             default: 50
         - in: query
           name: offset
           schema:
             type: integer
-            minimum: 0
             default: 0
       responses:
         '200':
@@ -34,6 +32,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentListResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /agents/{agent_id}:
     put:
@@ -55,6 +55,8 @@ paths:
                 $ref: '#/components/schemas/RegisterAgentResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
     get:
       summary: Get agent details
       parameters:
@@ -67,6 +69,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /agents/{agent_id}/heartbeat:
     post:
@@ -86,7 +90,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /agents/{agent_id}/tasks:poll:
     post:
@@ -106,7 +114,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PollTasksResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /tasks:
     post:
@@ -126,7 +138,9 @@ paths:
                 $ref: '#/components/schemas/SubmitTaskResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
-        '422':
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
     get:
       summary: List tasks
@@ -144,13 +158,11 @@ paths:
           name: limit
           schema:
             type: integer
-            minimum: 1
             default: 50
         - in: query
           name: offset
           schema:
             type: integer
-            minimum: 0
             default: 0
       responses:
         '200':
@@ -160,6 +172,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/TaskListResponse'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /tasks/{task_id}:
     get:
@@ -173,7 +187,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /tasks/{task_id}/cancel:
     post:
@@ -187,9 +205,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /tasks/{task_id}/status:
     post:
@@ -209,7 +231,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
           $ref: '#/components/responses/ErrorResponse'
   /tasks/{task_id}/logs:
     get:
@@ -218,10 +246,10 @@ paths:
         - $ref: '#/components/parameters/TaskId'
         - in: query
           name: stream
-          required: true
           schema:
             type: string
             enum: [stdout, stderr]
+            default: stdout
       responses:
         '200':
           description: Log content
@@ -229,6 +257,8 @@ paths:
             text/plain:
               schema:
                 type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
   /tasks/{task_id}/logs:tail:
@@ -238,16 +268,15 @@ paths:
         - $ref: '#/components/parameters/TaskId'
         - in: query
           name: stream
-          required: true
           schema:
             type: string
             enum: [stdout, stderr]
+            default: stdout
         - in: query
           name: from
           required: false
           schema:
             type: integer
-            minimum: 0
             default: 0
       responses:
         '200':
@@ -256,6 +285,13 @@ paths:
             text/plain:
               schema:
                 type: string
+          headers:
+            X-Log-Size:
+              description: Current size of the log in bytes.
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
 components:
@@ -308,7 +344,7 @@ components:
       properties:
         os:
           type: string
-          enum: [linux, windows]
+          description: Agent OS string; values like linux/windows are accepted but not validated.
         version:
           type: string
         resources:
@@ -322,21 +358,19 @@ components:
           enum: [ok, error]
         heartbeat_interval_sec:
           type: integer
-          minimum: 1
     HeartbeatRequest:
       type: object
-      required: [status, timestamp]
+      required: [status]
       properties:
         status:
           type: string
-          enum: [idle, busy]
+          enum: [idle, busy, offline]
         running_tasks:
           type: array
           items:
             type: string
         free_slots:
           type: integer
-          minimum: 0
         timestamp:
           type: string
           format: date-time
@@ -346,7 +380,6 @@ components:
       properties:
         free_slots:
           type: integer
-          minimum: 0
     PollTasksResponse:
       type: object
       required: [tasks]
@@ -361,7 +394,7 @@ components:
       properties:
         state:
           type: string
-          enum: [running, succeeded, failed, canceled]
+          enum: [queued, running, succeeded, failed, canceled]
         exit_code:
           type: integer
         started_at:
@@ -374,8 +407,10 @@ components:
           type: string
     SubmitTaskRequest:
       type: object
-      required: [command]
+      required: [task_id, command]
       properties:
+        task_id:
+          type: string
         command:
           type: string
         args:
@@ -388,7 +423,6 @@ components:
             type: string
         timeout_sec:
           type: integer
-          minimum: 1
         constraints:
           $ref: '#/components/schemas/TaskConstraints'
     SubmitTaskResponse:
@@ -404,7 +438,7 @@ components:
         tasks:
           type: array
           items:
-            $ref: '#/components/schemas/Task'
+            $ref: '#/components/schemas/TaskSummary'
     AgentListResponse:
       type: object
       required: [agents]
@@ -412,7 +446,7 @@ components:
         agents:
           type: array
           items:
-            $ref: '#/components/schemas/Agent'
+            $ref: '#/components/schemas/AgentSummary'
     TaskResponse:
       type: object
       required: [task]
@@ -431,25 +465,20 @@ components:
       properties:
         cpu_cores:
           type: integer
-          minimum: 1
         ram_mb:
           type: integer
-          minimum: 1
         slots:
           type: integer
-          minimum: 1
     TaskConstraints:
       type: object
       properties:
         os:
           type: string
-          enum: [linux, windows]
+          description: Required OS string to match an agent; not validated by server.
         cpu_cores:
           type: integer
-          minimum: 1
         ram_mb:
           type: integer
-          minimum: 1
         labels:
           type: array
           items:
@@ -472,7 +501,6 @@ components:
             type: string
         timeout_sec:
           type: integer
-          minimum: 1
         constraints:
           $ref: '#/components/schemas/TaskConstraints'
     Task:
@@ -496,7 +524,6 @@ components:
             type: string
         timeout_sec:
           type: integer
-          minimum: 1
         constraints:
           $ref: '#/components/schemas/TaskConstraints'
         assigned_agent:
@@ -522,7 +549,7 @@ components:
           type: string
         os:
           type: string
-          enum: [linux, windows]
+          description: Agent OS string; values like linux/windows are accepted but not validated.
         version:
           type: string
         resources:
@@ -533,3 +560,21 @@ components:
         last_heartbeat:
           type: string
           format: date-time
+    TaskSummary:
+      type: object
+      required: [task_id, state]
+      properties:
+        task_id:
+          type: string
+        state:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+    AgentSummary:
+      type: object
+      required: [agent_id, status]
+      properties:
+        agent_id:
+          type: string
+        status:
+          type: string
+          enum: [idle, busy, offline]
