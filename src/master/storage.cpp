@@ -6,6 +6,8 @@
 
 #include <pqxx/pqxx>
 
+#include "common/logging.h"
+
 namespace dc {
 namespace master {
 
@@ -254,6 +256,7 @@ CreateTaskResult Storage::CreateTask(const TaskInput& task) {
     tx.exec(insert_constraints_query);
 
     tx.commit();
+    spdlog::debug("DB task created: {}", task.task_id);
     return CreateTaskResult::Ok;
 }
 
@@ -508,6 +511,7 @@ bool Storage::UpdateTaskStatus(const std::string& task_id,
     }
 
     tx.commit();
+    spdlog::debug("DB task status updated: {} -> {}", task_id, db_state);
     return true;
 }
 
@@ -539,6 +543,7 @@ CancelTaskResult Storage::CancelTask(const std::string& task_id) {
     tx.exec(cancel_assignments_query);
 
     tx.commit();
+    spdlog::debug("DB task canceled: {}", task_id);
     return CancelTaskResult::Ok;
 }
 
@@ -578,6 +583,7 @@ int Storage::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     }
 
     tx.commit();
+    spdlog::debug("DB marked offline agents: {}", agents.size());
     return static_cast<int>(agents.size());
 }
 

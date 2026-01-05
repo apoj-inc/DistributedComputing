@@ -45,6 +45,8 @@ Master service:
 - `MASTER_HOST` (default: `0.0.0.0`)
 - `MASTER_PORT` (default: `8080`)
 - `LOG_DIR` (default: `logs`)
+- `MASTER_LOG_FILE` (default: `logs/master.log`, rotated 10MB x 5)
+- `MASTER_LOG_LEVEL` (default: `trace`)
 - `HEARTBEAT_SEC` (default: `30`)
 - `OFFLINE_SEC` (default: `120`)
 - `INIT_DB_PYTHON` (optional python executable override for init_db)
@@ -96,6 +98,8 @@ DB_SSLMODE=disable
 MASTER_HOST=0.0.0.0
 MASTER_PORT=8080
 LOG_DIR=logs
+MASTER_LOG_FILE=logs/master.log
+MASTER_LOG_LEVEL=trace
 HEARTBEAT_SEC=30
 OFFLINE_SEC=120
 ```

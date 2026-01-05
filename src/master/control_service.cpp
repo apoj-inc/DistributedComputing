@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,6 +10,7 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include "common/logging.h"
 namespace dc {
 namespace master {
 
@@ -166,10 +166,12 @@ void ControlService::RegisterRoutes() {
         try {
             storage_.UpsertAgent(agent);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error upserting agent {}: {}", agent_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
 
+        spdlog::info("Agent upserted: {}", agent_id);
         json response;
         response["status"] = "ok";
         response["heartbeat_interval_sec"] = config_.heartbeat_interval_sec;
@@ -208,10 +210,12 @@ void ControlService::RegisterRoutes() {
                 return;
             }
         } catch (const std::exception& ex) {
+            spdlog::error("DB error updating heartbeat for {}: {}", agent_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
 
+        spdlog::debug("Heartbeat updated: {} status={}", agent_id, status);
         SetJsonResponse(res, json{{"status", "ok"}}, 200);
     });
 
@@ -236,6 +240,7 @@ void ControlService::RegisterRoutes() {
         try {
             dispatches = storage_.PollTasksForAgent(agent_id, free_slots);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error polling tasks for {}: {}", agent_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -246,6 +251,7 @@ void ControlService::RegisterRoutes() {
             return;
         }
 
+        spdlog::debug("Tasks polled for {}: {} dispatches", agent_id, dispatches->size());
         json response;
         response["tasks"] = json::array();
         for (const auto& task : *dispatches) {
@@ -305,6 +311,7 @@ void ControlService::RegisterRoutes() {
         try {
             result = storage_.CreateTask(task);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error creating task {}: {}", task.task_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -319,6 +326,7 @@ void ControlService::RegisterRoutes() {
             return;
         }
 
+        spdlog::info("Task created: {}", task.task_id);
         json response;
         response["task_id"] = task.task_id;
         SetJsonResponse(res, response, 201);
@@ -335,6 +343,7 @@ void ControlService::RegisterRoutes() {
         try {
             task = storage_.GetTask(task_id);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error fetching task {}: {}", task_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -391,10 +400,17 @@ void ControlService::RegisterRoutes() {
         try {
             tasks = storage_.ListTasks(state, agent_id, limit, offset);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error listing tasks: {}", ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
 
+        spdlog::debug("List tasks: state={} agent_id={} limit={} offset={} -> {}",
+                      state.value_or(""),
+                      agent_id.value_or(""),
+                      limit,
+                      offset,
+                      tasks.size());
         json response;
         response["tasks"] = json::array();
         for (const auto& task : tasks) {
@@ -432,6 +448,7 @@ void ControlService::RegisterRoutes() {
         try {
             current = storage_.GetTask(task_id);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error fetching task {} for update: {}", task_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -474,10 +491,12 @@ void ControlService::RegisterRoutes() {
                 return;
             }
         } catch (const std::exception& ex) {
+            spdlog::error("DB error updating task {}: {}", task_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
 
+        spdlog::info("Task status updated: {} {} -> {}", task_id, current->state, state);
         SetJsonResponse(res, json{{"status", "ok"}}, 200);
     });
 
@@ -492,6 +511,7 @@ void ControlService::RegisterRoutes() {
         try {
             result = storage_.CancelTask(task_id);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error canceling task {}: {}", task_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -513,6 +533,7 @@ void ControlService::RegisterRoutes() {
             return;
         }
 
+        spdlog::info("Task canceled: {}", task_id);
         SetJsonResponse(res, json{{"status", "ok"}}, 200);
     });
 
@@ -523,6 +544,7 @@ void ControlService::RegisterRoutes() {
         try {
             agent = storage_.GetAgent(agent_id);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error fetching agent {}: {}", agent_id, ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
@@ -561,10 +583,16 @@ void ControlService::RegisterRoutes() {
         try {
             agents = storage_.ListAgents(status, limit, offset);
         } catch (const std::exception& ex) {
+            spdlog::error("DB error listing agents: {}", ex.what());
             SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
             return;
         }
 
+        spdlog::debug("List agents: status={} limit={} offset={} -> {}",
+                      status.value_or(""),
+                      limit,
+                      offset,
+                      agents.size());
         json response;
         response["agents"] = json::array();
         for (const auto& agent : agents) {
@@ -638,9 +666,12 @@ void ControlService::StartMaintenanceThread() {
     maintenance_thread_ = std::thread([this]() {
         while (running_.load()) {
             try {
-                storage_.MarkOfflineAgentsAndRequeue(config_.offline_after_sec);
+                int count = storage_.MarkOfflineAgentsAndRequeue(config_.offline_after_sec);
+                if (count > 0) {
+                    spdlog::info("Marked {} agents offline and requeued tasks", count);
+                }
             } catch (const std::exception& ex) {
-                std::cerr << "maintenance error: " << ex.what() << std::endl;
+                spdlog::error("Maintenance error: {}", ex.what());
             }
             std::this_thread::sleep_for(std::chrono::seconds(10));
         }
@@ -656,16 +687,19 @@ void ControlService::StopMaintenanceThread() {
 
 int ControlService::Run() {
     server_ = std::make_unique<httplib::Server>();
+    server_->set_logger([](const httplib::Request& req, const httplib::Response& res) {
+        spdlog::debug("HTTP {} {} -> {}", req.method, req.path, res.status);
+    });
 
     RegisterRoutes();
 
     StartMaintenanceThread();
-    std::cout << "Master listening on " << config_.host << ":" << config_.port << std::endl;
+    spdlog::info("Master listening on {}:{}", config_.host, config_.port);
     bool ok = server_->listen(config_.host.c_str(), config_.port);
     StopMaintenanceThread();
 
     if (!ok) {
-        std::cerr << "Failed to bind to " << config_.host << ":" << config_.port << std::endl;
+        spdlog::error("Failed to bind to {}:{}", config_.host, config_.port);
         return 2;
     }
     return 0;

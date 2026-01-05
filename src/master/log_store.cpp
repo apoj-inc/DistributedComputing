@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common/logging.h"
 #include "common/time_utils.h"
 
 namespace dc {
@@ -129,6 +130,7 @@ LogStore::ReadResult LogStore::ReadAll(const std::string& task_id,
     const auto paths = PathsForTask(task_id);
     if (!IsPathWithinRoot(paths.dir) || !IsPathWithinRoot(paths.stdout_path) ||
         !IsPathWithinRoot(paths.stderr_path) || !IsPathWithinRoot(paths.meta_path)) {
+        spdlog::warn("Rejected log path for task {}", task_id);
         return LogStore::ReadResult{};
     }
     EnsureLogDir(paths.dir);
@@ -136,6 +138,9 @@ LogStore::ReadResult LogStore::ReadAll(const std::string& task_id,
         (stream == "stderr") ? paths.stderr_path : paths.stdout_path;
 
     auto result = ReadFileInternal(target, 0);
+    if (result.exists) {
+        spdlog::debug("Read log {} stream={} size_bytes={}", task_id, stream, result.size_bytes);
+    }
     RefreshMetadata(task_id, paths.stdout_path, paths.stderr_path, paths.meta_path);
     return result;
 }
@@ -146,6 +151,7 @@ LogStore::ReadResult LogStore::ReadFromOffset(const std::string& task_id,
     const auto paths = PathsForTask(task_id);
     if (!IsPathWithinRoot(paths.dir) || !IsPathWithinRoot(paths.stdout_path) ||
         !IsPathWithinRoot(paths.stderr_path) || !IsPathWithinRoot(paths.meta_path)) {
+        spdlog::warn("Rejected log path for task {}", task_id);
         return LogStore::ReadResult{};
     }
     EnsureLogDir(paths.dir);
@@ -153,6 +159,13 @@ LogStore::ReadResult LogStore::ReadFromOffset(const std::string& task_id,
         (stream == "stderr") ? paths.stderr_path : paths.stdout_path;
 
     auto result = ReadFileInternal(target, offset);
+    if (result.exists) {
+        spdlog::debug("Read log tail {} stream={} from={} size_bytes={}",
+                      task_id,
+                      stream,
+                      offset,
+                      result.size_bytes);
+    }
     RefreshMetadata(task_id, paths.stdout_path, paths.stderr_path, paths.meta_path);
     return result;
 }

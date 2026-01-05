@@ -1,6 +1,5 @@
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -9,6 +8,7 @@
 #endif
 
 #include "common/env.h"
+#include "common/logging.h"
 #include "control_service.h"
 
 namespace {
@@ -46,7 +46,7 @@ int RunInitDbScript() {
             command += " --config \"" + config_path + "\"";
         }
 
-        std::cout << "Running DB init: " << command << std::endl;
+        spdlog::info("Running DB init: {}", command);
         int raw_code = std::system(command.c_str());
         int code = NormalizeExitCode(raw_code);
 
@@ -64,13 +64,25 @@ int RunInitDbScript() {
 int main() {
     using namespace dc::master;
 
+    const std::string log_dir = dc::common::GetEnvOrDefault("LOG_DIR", "logs");
+    const std::string log_level =
+        dc::common::GetEnvOrDefault("MASTER_LOG_LEVEL", "trace");
+    const std::string log_file =
+        dc::common::GetEnvOrDefault("MASTER_LOG_FILE", log_dir + "/master.log");
+    const auto resolved_level =
+        dc::common::ParseLogLevel(log_level, spdlog::level::trace);
+    dc::common::InitLogging(log_file, resolved_level);
+    spdlog::info("Logging initialized (level={}, file={})",
+                 spdlog::level::to_string_view(resolved_level),
+                 log_file);
+
     // Configuration is pulled from environment variables to match deployment style.
     MasterConfig config;
     config.host = dc::common::GetEnvOrDefault("MASTER_HOST", "0.0.0.0");
     config.port = dc::common::GetEnvIntOrDefault("MASTER_PORT", 8080);
     config.heartbeat_interval_sec = dc::common::GetEnvIntOrDefault("HEARTBEAT_SEC", 30);
     config.offline_after_sec = dc::common::GetEnvIntOrDefault("OFFLINE_SEC", 120);
-    config.log_dir = dc::common::GetEnvOrDefault("LOG_DIR", "logs");
+    config.log_dir = log_dir;
 
     DbConfig db;
     db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
@@ -81,7 +93,7 @@ int main() {
     db.sslmode = dc::common::GetEnvOrDefault("DB_SSLMODE", "");
 
     if (db.user.empty() || db.dbname.empty()) {
-        std::cerr << "Missing DB_USER or DB_NAME environment variable." << std::endl;
+        spdlog::critical("Missing DB_USER or DB_NAME environment variable.");
         return 2;
     }
 
@@ -89,18 +101,18 @@ int main() {
     std::error_code ec;
     std::filesystem::create_directories(config.log_dir, ec);
     if (ec) {
-        std::cerr << "Failed to create LOG_DIR: " << config.log_dir << std::endl;
+        spdlog::error("Failed to create LOG_DIR: {}", config.log_dir);
         return 2;
     }
 
     // Apply/init DB schema; refuse to start if init_db reports differences.
     int init_code = RunInitDbScript();
     if (init_code == 4) {
-        std::cerr << "Database schema mismatch; see init_db.py output above." << std::endl;
+        spdlog::critical("Database schema mismatch; see init_db.py output above.");
         return init_code;
     }
     if (init_code != 0) {
-        std::cerr << "Database init failed with code " << init_code << std::endl;
+        spdlog::critical("Database init failed with code {}", init_code);
         return init_code;
     }
 
