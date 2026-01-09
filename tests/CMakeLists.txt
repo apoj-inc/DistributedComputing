@@ -61,3 +61,41 @@ set_tests_properties(master_integration_test PROPERTIES
     ENVIRONMENT
         "DC_MASTER_BIN=$<TARGET_FILE:dc_master>;DC_TEST_ENV_FILE=${PROJECT_SOURCE_DIR}/configs/master.env"
 )
+
+add_executable(common_unit_tests
+    common_tests.cpp
+)
+
+target_include_directories(common_unit_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/third_party
+)
+
+target_link_libraries(common_unit_tests
+    PRIVATE
+        GTest::gtest_main
+        dc_common
+)
+
+add_test(NAME common_unit_tests COMMAND common_unit_tests)
+
+add_executable(master_unit_tests
+    master_tests.cpp
+    ${PROJECT_SOURCE_DIR}/src/master/api_mappers.cpp
+    ${PROJECT_SOURCE_DIR}/src/master/log_store.cpp
+)
+
+target_include_directories(master_unit_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/third_party
+)
+
+target_link_libraries(master_unit_tests
+    PRIVATE
+        GTest::gtest_main
+        dc_common
+)
+
+add_test(NAME master_unit_tests COMMAND master_unit_tests)
