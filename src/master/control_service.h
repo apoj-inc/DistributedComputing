@@ -23,6 +23,7 @@ struct MasterConfig {
     int heartbeat_interval_sec = 30;
     int offline_after_sec = 120;
     std::string log_dir;
+    std::size_t max_log_upload_bytes = 10 * 1024 * 1024;  // 10MB
 };
 
 // REST API control service for Master.
@@ -48,6 +49,7 @@ private:
     void HandleListAgents(const httplib::Request& req, httplib::Response& res);
     void HandleGetLogs(const httplib::Request& req, httplib::Response& res);
     void HandleTailLogs(const httplib::Request& req, httplib::Response& res);
+    void HandleUploadLogs(const httplib::Request& req, httplib::Response& res);
     void StartMaintenanceThread();
     void StopMaintenanceThread();
 

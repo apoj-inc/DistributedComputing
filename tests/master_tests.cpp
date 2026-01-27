@@ -329,3 +329,19 @@ TEST(LogStoreTest, RefreshesMetadataOnRead) {
 
     fs::remove_all(root);
 }
+
+TEST(LogStoreTest, WriteAllStoresContentAndRefreshesMeta) {
+    fs::path root = MakeTempDir();
+    dc::master::LogStore store(root.string());
+
+    EXPECT_TRUE(store.WriteAll("task-1", "stdout", "hello"));
+
+    auto result = store.ReadAll("task-1", "stdout");
+    EXPECT_TRUE(result.exists);
+    EXPECT_EQ(result.data, "hello");
+
+    fs::path meta_path = root / "task-1" / "meta.json";
+    EXPECT_TRUE(fs::exists(meta_path));
+
+    fs::remove_all(root);
+}

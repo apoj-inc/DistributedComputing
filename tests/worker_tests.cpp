@@ -100,6 +100,13 @@ public:
                  const std::optional<std::string>& error_message,
                  std::string* error),
                 (const, override));
+    MOCK_METHOD(bool,
+                UploadTaskLog,
+                (const std::string& task_id,
+                 const std::string& stream,
+                 const std::string& data,
+                 std::string* error),
+                (const, override));
 };
 
 dc::worker::WorkerConfig MakeBaseConfig(const fs::path& log_dir) {
@@ -113,6 +120,8 @@ dc::worker::WorkerConfig MakeBaseConfig(const fs::path& log_dir) {
     cfg.slots = 1;
     cfg.log_dir = log_dir.string();
     cfg.cancel_check_interval_sec = 1;
+    cfg.upload_logs = true;
+    cfg.max_upload_bytes = 1024 * 1024;
     return cfg;
 }
 
@@ -255,6 +264,86 @@ TEST(WorkerAppTest, RunOnceNoTasks) {
 
     fs::remove_all(log_dir);
 }
+
+#ifndef _WIN32
+TEST(WorkerAppTest, UploadsLogsAfterTaskCompletion) {
+    auto log_dir = MakeTempPath("dc_worker_logs_");
+    fs::create_directories(log_dir);
+    auto cfg = MakeBaseConfig(log_dir);
+
+    auto mock_client = std::make_unique<::testing::StrictMock<MockAgentClient>>();
+    auto* client_ptr = mock_client.get();
+
+    dc::worker::HeartbeatResponse hb_resp;
+    hb_resp.heartbeat_interval_sec = 2;
+    EXPECT_CALL(*client_ptr, RegisterAgent(_, NotNull(), _))
+        .WillOnce(DoAll(::testing::SetArgPointee<1>(hb_resp), Return(true)));
+    EXPECT_CALL(*client_ptr, SendHeartbeat(cfg.agent_id, "idle", _)).WillOnce(Return(true));
+
+    EXPECT_CALL(*client_ptr, PollTasks(cfg.agent_id, cfg.slots, NotNull(), _))
+        .WillOnce(DoAll(Invoke([](const std::string&, int, std::vector<dc::worker::TaskDispatch>* tasks,
+                                  std::string*) {
+                            tasks->push_back(MakeTask("task-1",
+                                                      "/bin/sh",
+                                                      {"-c", "echo out; echo err 1>&2"}));
+                        }),
+                        Return(true)));
+
+    EXPECT_CALL(*client_ptr, GetTaskState("task-1", NotNull(), _))
+        .WillRepeatedly(DoAll(::testing::SetArgPointee<1>("running"), Return(true)));
+
+    EXPECT_CALL(*client_ptr,
+                UploadTaskLog("task-1",
+                              "stdout",
+                              ::testing::HasSubstr("out"),
+                              _))
+        .WillOnce(Return(true));
+    EXPECT_CALL(*client_ptr,
+                UploadTaskLog("task-1",
+                              "stderr",
+                              ::testing::HasSubstr("err"),
+                              _))
+        .WillOnce(Return(true));
+
+    EXPECT_CALL(*client_ptr,
+                UpdateTaskStatus("task-1",
+                                 "running",
+                                 ::testing::Truly([](const std::optional<int>& code) {
+                                     return !code.has_value();
+                                 }),
+                                 ::testing::Truly([](const std::optional<std::string>& ts) {
+                                     return ts.has_value() && !ts->empty();
+                                 }),
+                                 Eq(std::nullopt),
+                                 Eq(std::nullopt),
+                                 _))
+        .WillOnce(Return(true));
+
+    EXPECT_CALL(*client_ptr,
+                UpdateTaskStatus("task-1",
+                                 "succeeded",
+                                 ::testing::Truly([](const std::optional<int>& code) {
+                                     return code && *code == 0;
+                                 }),
+                                 ::testing::Truly([](const std::optional<std::string>& ts) {
+                                     return ts.has_value() && !ts->empty();
+                                 }),
+                                 ::testing::Truly([](const std::optional<std::string>& ts) {
+                                     return ts.has_value() && !ts->empty();
+                                 }),
+                                 ::testing::Truly([](const std::optional<std::string>& msg) {
+                                     return !msg.has_value() || msg->empty();
+                                 }),
+                                 _))
+        .WillOnce(Return(true));
+
+    dc::worker::WorkerApp app(cfg, std::move(mock_client));
+    int rc = app.Run(true);
+    EXPECT_EQ(rc, 0);
+
+    fs::remove_all(log_dir);
+}
+#endif
 
 TEST(WorkerAppTest, HandlesOsConstraintMismatch) {
     auto log_dir = MakeTempPath("dc_worker_logs_");

@@ -63,6 +63,11 @@ public:
                                   const std::optional<std::string>& error_message,
                                   std::string* error) const;
 
+    virtual bool UploadTaskLog(const std::string& task_id,
+                               const std::string& stream,
+                               const std::string& data,
+                               std::string* error) const;
+
 private:
     httplib::Headers DefaultHeaders() const;
     bool IsSuccess(const httplib::Result& res, std::string* error) const;

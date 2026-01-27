@@ -1,7 +1,10 @@
 #include "worker_app.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -30,6 +33,49 @@ int DefaultCpuCores() {
     return cores > 0 ? static_cast<int>(cores) : 1;
 }
 
+bool ParseBoolEnv(const std::string& value, bool fallback) {
+    if (value.empty()) {
+        return fallback;
+    }
+    std::string lower = value;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
+}
+
+bool ReadFileWithLimit(const std::string& path,
+                       std::size_t max_bytes,
+                       std::string* data,
+                       std::string* error) {
+    if (!data) {
+        return false;
+    }
+    std::error_code ec;
+    auto size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        if (error) {
+            *error = "stat failed for " + path + ": " + ec.message();
+        }
+        return false;
+    }
+    if (size > max_bytes) {
+        if (error) {
+            *error = "log too large (" + std::to_string(size) + " bytes)";
+        }
+        return false;
+    }
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) {
+        if (error) {
+            *error = "open failed for " + path;
+        }
+        return false;
+    }
+    data->assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return true;
+}
+
 }  // namespace
 
 WorkerConfig LoadWorkerConfigFromEnv() {
@@ -45,6 +91,9 @@ WorkerConfig LoadWorkerConfigFromEnv() {
     cfg.log_dir = dc::common::GetEnvOrDefault("WORKER_LOG_DIR", "logs/worker");
     cfg.cancel_check_interval_sec =
         dc::common::GetEnvIntOrDefault("CANCEL_CHECK_SEC", 1);
+    cfg.upload_logs = ParseBoolEnv(dc::common::GetEnvOrDefault("UPLOAD_LOGS", "true"), true);
+    cfg.max_upload_bytes = static_cast<std::size_t>(
+        dc::common::GetEnvIntOrDefault("MAX_UPLOAD_BYTES", 10 * 1024 * 1024));
     return cfg;
 }
 
@@ -214,6 +263,35 @@ void WorkerApp::TickOnce() {
             error_message = "Canceled by master";
         } else if (exec.exit_code == 0) {
             state = "succeeded";
+        }
+
+        if (config_.upload_logs) {
+            auto upload_stream = [&](const std::string& stream, const std::string& path) {
+                std::string data;
+                std::string read_error;
+                if (!ReadFileWithLimit(path, config_.max_upload_bytes, &data, &read_error)) {
+                    return std::string("read ") + stream + " log failed: " + read_error;
+                }
+                std::string http_error;
+                if (!client_->UploadTaskLog(task.task_id, stream, data, &http_error)) {
+                    return std::string("upload ") + stream + " log failed: " + http_error;
+                }
+                return std::string();
+            };
+
+            std::string up_err = upload_stream("stdout", exec.stdout_path);
+            if (up_err.empty()) {
+                std::string err2 = upload_stream("stderr", exec.stderr_path);
+                if (!err2.empty()) {
+                    up_err = std::move(err2);
+                }
+            }
+            if (!up_err.empty()) {
+                if (!error_message.empty()) {
+                    error_message += "; ";
+                }
+                error_message += up_err;
+            }
         }
 
         if (!client_->UpdateTaskStatus(task.task_id, state, exit_code, started_at,

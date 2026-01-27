@@ -143,6 +143,11 @@ void ControlService::RegisterRoutes() {
                  [this](const httplib::Request& req, httplib::Response& res) {
         HandleTailLogs(req, res);
     });
+
+    server_->Post(R"(/api/v1/tasks/([^/]+)/logs:upload)",
+                  [this](const httplib::Request& req, httplib::Response& res) {
+        HandleUploadLogs(req, res);
+    });
 }
 
 void ControlService::HandleUpsertAgent(const httplib::Request& req,
@@ -573,6 +578,52 @@ void ControlService::HandleTailLogs(const httplib::Request& req,
     res.status = 200;
     res.set_header("X-Log-Size", std::to_string(log_result.size_bytes));
     res.set_content(log_result.data, "text/plain; charset=utf-8");
+}
+
+void ControlService::HandleUploadLogs(const httplib::Request& req,
+                                      httplib::Response& res) {
+    const std::string task_id = req.matches[1];
+    if (!api::IsValidTaskId(task_id)) {
+        SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
+        return;
+    }
+
+    json body;
+    std::string error;
+    if (!ParseJsonBody(req, &body, &error)) {
+        SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid JSON", {{"error", error}}), 400);
+        return;
+    }
+
+    std::string stream = body.value("stream", "stdout");
+    if (stream != "stdout" && stream != "stderr") {
+        SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid stream"), 400);
+        return;
+    }
+    if (!body.contains("data") || !body["data"].is_string()) {
+        SetJsonResponse(res, MakeError("BAD_REQUEST", "Missing data"), 400);
+        return;
+    }
+
+    const std::string data = body["data"].get<std::string>();
+    if (data.size() > config_.max_log_upload_bytes) {
+        SetJsonResponse(res,
+                        MakeError("PAYLOAD_TOO_LARGE",
+                                  "Log upload exceeds limit",
+                                  {{"limit_bytes", config_.max_log_upload_bytes}}),
+                        413);
+        return;
+    }
+
+    if (!log_store_.WriteAll(task_id, stream, data)) {
+        SetJsonResponse(res, MakeError("LOG_WRITE_FAILED", "Failed to store log"), 500);
+        return;
+    }
+
+    json response;
+    response["status"] = "ok";
+    response["size_bytes"] = data.size();
+    SetJsonResponse(res, response, 200);
 }
 
 void ControlService::StartMaintenanceThread() {

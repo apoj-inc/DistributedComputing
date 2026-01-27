@@ -21,6 +21,8 @@ struct WorkerConfig {
     int http_timeout_ms = 5000;
     std::string log_dir;
     int cancel_check_interval_sec = 1;
+    bool upload_logs = true;
+    std::size_t max_upload_bytes = 10 * 1024 * 1024;  // 10MB
 };
 
 WorkerConfig LoadWorkerConfigFromEnv();

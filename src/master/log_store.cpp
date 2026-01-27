@@ -130,6 +130,29 @@ LogStore::ReadResult LogStore::ReadAll(const std::string& task_id,
     return ReadInternal(task_id, stream, 0);
 }
 
+bool LogStore::WriteAll(const std::string& task_id,
+                        const std::string& stream,
+                        const std::string& data) {
+    const auto paths = PathsForTask(task_id);
+    if (!IsPathWithinRoot(paths.dir) || !IsPathWithinRoot(paths.stdout_path) ||
+        !IsPathWithinRoot(paths.stderr_path) || !IsPathWithinRoot(paths.meta_path)) {
+        spdlog::warn("Rejected log write path for task {}", task_id);
+        return false;
+    }
+    EnsureLogDir(paths.dir);
+    const std::string& target =
+        (stream == "stderr") ? paths.stderr_path : paths.stdout_path;
+    std::ofstream out(target, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+    out.write(data.data(), static_cast<std::streamsize>(data.size()));
+    out.close();
+    RefreshMetadata(task_id, paths.stdout_path, paths.stderr_path, paths.meta_path);
+    spdlog::debug("Wrote log {} stream={} bytes={}", task_id, stream, data.size());
+    return true;
+}
+
 LogStore::ReadResult LogStore::ReadInternal(const std::string& task_id,
                                             const std::string& stream,
                                             std::uint64_t offset) {

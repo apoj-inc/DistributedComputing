@@ -49,7 +49,13 @@ Master service:
 - `MASTER_LOG_LEVEL` (default: `trace`)
 - `HEARTBEAT_SEC` (default: `30`)
 - `OFFLINE_SEC` (default: `120`)
+- `MAX_LOG_UPLOAD_BYTES` (default: `10485760`, limit на размер загружаемого лога от агента)
 - `INIT_DB_PYTHON` (optional python executable override for init_db)
+
+Worker service:
+- `UPLOAD_LOGS` (default: `true`)
+- `MAX_UPLOAD_BYTES` (default: `10485760`, локальный лимит перед отправкой)
+- `WORKER_LOG_DIR` (default: `logs/worker`)
 
 ## Build
 ```

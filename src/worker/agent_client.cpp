@@ -194,6 +194,21 @@ bool AgentClient::UpdateTaskStatus(const std::string& task_id,
     return IsSuccess(res, error);
 }
 
+bool AgentClient::UploadTaskLog(const std::string& task_id,
+                                const std::string& stream,
+                                const std::string& data,
+                                std::string* error) const {
+    nlohmann::json payload{
+        {"stream", stream},
+        {"data", data},
+    };
+    auto res = client_->Post(BuildTaskPath(task_id, "/logs:upload").c_str(),
+                             DefaultHeaders(),
+                             payload.dump(),
+                             "application/json");
+    return IsSuccess(res, error);
+}
+
 bool AgentClient::GetTaskState(const std::string& task_id,
                                std::string* state,
                                std::string* error) const {

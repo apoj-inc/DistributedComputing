@@ -214,6 +214,9 @@ int main(int argc, char* argv[]) {
     config.heartbeat_interval_sec = dc::common::GetEnvIntOrDefault("HEARTBEAT_SEC", 30);
     config.offline_after_sec = dc::common::GetEnvIntOrDefault("OFFLINE_SEC", 120);
     config.log_dir = log_dir;
+    config.max_log_upload_bytes =
+        static_cast<std::size_t>(dc::common::GetEnvIntOrDefault("MAX_LOG_UPLOAD_BYTES",
+                                                                10 * 1024 * 1024));
 
     DbConfig db;
     db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");

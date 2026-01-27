@@ -30,6 +30,12 @@ public:
                               const std::string& stream,
                               std::uint64_t offset);
 
+    // Writes full content for a stream; overwrites existing file.
+    // Returns false on path validation or IO error.
+    bool WriteAll(const std::string& task_id,
+                  const std::string& stream,
+                  const std::string& data);
+
 private:
     struct Paths {
         std::string dir;
