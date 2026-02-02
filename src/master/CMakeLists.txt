@@ -13,6 +13,8 @@ target_include_directories(dc_master
         ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party
 )
 
+find_package(Threads REQUIRED)
+
 find_package(PQXX QUIET)
 if(NOT PQXX_FOUND)
     find_package(libpqxx QUIET)
@@ -46,5 +48,6 @@ endif()
 target_link_libraries(dc_master
     PRIVATE
         dc_common
+        Threads::Threads
         ${PQXX_TARGET}
 )

@@ -42,6 +42,21 @@ endif()
 
 # Build Windows worker (cross) alongside native build when requested.
 if(DC_BUILD_WIN_WORKER)
+    # Gracefully skip the cross-build when the default MinGW toolchain isn't available.
+    # On machines without mingw-w64 (e.g., CI runners or small SBCs), the configure
+    # step would otherwise fail before native targets can build.
+    if(DC_WIN_TOOLCHAIN_FILE STREQUAL "${DC_WIN_DEFAULT_TOOLCHAIN}")
+        find_program(_dc_mingw_cxx
+            NAMES x86_64-w64-mingw32-g++-posix x86_64-w64-mingw32-g++
+            DOC "MinGW-w64 cross C++ compiler for Windows worker")
+        if(NOT _dc_mingw_cxx)
+            message(WARNING "Disabling DC_BUILD_WIN_WORKER: mingw-w64 compiler not found. Install mingw-w64 or set DC_WIN_TOOLCHAIN_FILE to a valid toolchain.")
+            set(DC_BUILD_WIN_WORKER OFF CACHE BOOL "Also build Windows worker via ExternalProject" FORCE)
+        endif()
+    endif()
+endif()
+
+if(DC_BUILD_WIN_WORKER)
     include(ExternalProject)
     if(NOT DC_WIN_TOOLCHAIN_FILE)
         message(FATAL_ERROR "DC_BUILD_WIN_WORKER=ON requires DC_WIN_TOOLCHAIN_FILE to be set")
