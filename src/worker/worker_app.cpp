@@ -76,6 +76,13 @@ bool ReadFileWithLimit(const std::string& path,
     return true;
 }
 
+std::optional<std::string> OptionalNonEmpty(const std::string& value) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
 }  // namespace
 
 WorkerConfig LoadWorkerConfigFromEnv() {
@@ -294,8 +301,13 @@ void WorkerApp::TickOnce() {
             }
         }
 
-        if (!client_->UpdateTaskStatus(task.task_id, state, exit_code, started_at,
-                                       exec.finished_at, error_message, &error)) {
+        if (!client_->UpdateTaskStatus(task.task_id,
+                                       state,
+                                       exit_code,
+                                       OptionalNonEmpty(started_at),
+                                       OptionalNonEmpty(exec.finished_at),
+                                       OptionalNonEmpty(error_message),
+                                       &error)) {
             spdlog::warn("Failed to update task {} status: {}", task.task_id, error);
         } else {
             spdlog::info("Task {} completed: state={} exit_code={} log_dir={}",

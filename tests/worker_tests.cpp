@@ -332,7 +332,7 @@ TEST(WorkerAppTest, UploadsLogsAfterTaskCompletion) {
                                      return ts.has_value() && !ts->empty();
                                  }),
                                  ::testing::Truly([](const std::optional<std::string>& msg) {
-                                     return !msg.has_value() || msg->empty();
+                                     return !msg.has_value();
                                  }),
                                  _))
         .WillOnce(Return(true));

@@ -3,6 +3,8 @@
 #include <chrono>
 #include <sstream>
 
+#include "common/string_utils.h"
+
 namespace dc {
 namespace worker {
 
@@ -186,7 +188,7 @@ bool AgentClient::UpdateTaskStatus(const std::string& task_id,
         payload["finished_at"] = *finished_at;
     }
     if (error_message) {
-        payload["error_message"] = *error_message;
+        payload["error_message"] = dc::common::SanitizeUtf8Lossy(*error_message);
     }
 
     auto res = client_->Post(BuildTaskPath(task_id, "/status").c_str(), DefaultHeaders(),
@@ -198,9 +200,10 @@ bool AgentClient::UploadTaskLog(const std::string& task_id,
                                 const std::string& stream,
                                 const std::string& data,
                                 std::string* error) const {
+    const std::string safe_data = dc::common::SanitizeUtf8Lossy(data);
     nlohmann::json payload{
         {"stream", stream},
-        {"data", data},
+        {"data", safe_data},
     };
     auto res = client_->Post(BuildTaskPath(task_id, "/logs:upload").c_str(),
                              DefaultHeaders(),

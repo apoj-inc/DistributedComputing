@@ -8,6 +8,22 @@ namespace dc {
 namespace master {
 namespace api {
 
+namespace {
+
+std::optional<std::string> OptionalNonEmptyStringField(const nlohmann::json& body,
+                                                       const char* key) {
+    if (!body.contains(key) || !body[key].is_string()) {
+        return std::nullopt;
+    }
+    const std::string value = body[key].get<std::string>();
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+}  // namespace
+
 bool ParseAgentInput(const std::string& agent_id,
                      const nlohmann::json& body,
                      AgentInput* out,
@@ -151,21 +167,9 @@ bool ParseTaskStatusUpdate(const nlohmann::json& body,
     } else {
         out->exit_code = std::nullopt;
     }
-    if (body.contains("started_at") && body["started_at"].is_string()) {
-        out->started_at = body["started_at"].get<std::string>();
-    } else {
-        out->started_at = std::nullopt;
-    }
-    if (body.contains("finished_at") && body["finished_at"].is_string()) {
-        out->finished_at = body["finished_at"].get<std::string>();
-    } else {
-        out->finished_at = std::nullopt;
-    }
-    if (body.contains("error_message") && body["error_message"].is_string()) {
-        out->error_message = body["error_message"].get<std::string>();
-    } else {
-        out->error_message = std::nullopt;
-    }
+    out->started_at = OptionalNonEmptyStringField(body, "started_at");
+    out->finished_at = OptionalNonEmptyStringField(body, "finished_at");
+    out->error_message = OptionalNonEmptyStringField(body, "error_message");
     return true;
 }
 

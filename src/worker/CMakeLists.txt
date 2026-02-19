@@ -19,12 +19,12 @@ target_link_libraries(dc_worker
 
 if(WIN32)
     target_link_libraries(dc_worker PRIVATE ws2_32)
-    # Make Windows agent self-contained: link libstdc++, libgcc, and winpthread statically.
+    # Produce a standalone MinGW executable without shipping runtime DLLs.
     target_link_options(dc_worker PRIVATE
+        "-static"
         "-static-libstdc++"
         "-static-libgcc"
         "-Wl,-Bstatic"
         "-lwinpthread"
-        "-Wl,-Bdynamic"
     )
 endif()

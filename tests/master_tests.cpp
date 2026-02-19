@@ -206,6 +206,21 @@ TEST(ApiMappersTest, ParseTaskStatusUpdateReadsOptionalFields) {
     EXPECT_EQ(out.error_message.value(), "boom");
 }
 
+TEST(ApiMappersTest, ParseTaskStatusUpdateTreatsEmptyOptionalFieldsAsNullopt) {
+    dc::master::api::TaskStatusUpdate out;
+    std::string error;
+    nlohmann::json payload{
+        {"state", "failed"},
+        {"started_at", ""},
+        {"finished_at", ""},
+        {"error_message", ""},
+    };
+    EXPECT_TRUE(dc::master::api::ParseTaskStatusUpdate(payload, &out, &error));
+    EXPECT_FALSE(out.started_at.has_value());
+    EXPECT_FALSE(out.finished_at.has_value());
+    EXPECT_FALSE(out.error_message.has_value());
+}
+
 TEST(ApiMappersTest, IsValidTaskIdChecksCharacters) {
     EXPECT_TRUE(dc::master::api::IsValidTaskId("task-1_ok"));
     EXPECT_FALSE(dc::master::api::IsValidTaskId(""));

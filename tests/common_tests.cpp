@@ -99,6 +99,21 @@ TEST(StringUtilsTest, ToLowerCopyLeavesLowercaseUntouched) {
     EXPECT_EQ(dc::common::ToLowerCopy("already_lower"), "already_lower");
 }
 
+TEST(StringUtilsTest, IsValidUtf8AcceptsAsciiAndUtf8) {
+    EXPECT_TRUE(dc::common::IsValidUtf8("plain ascii"));
+    EXPECT_TRUE(dc::common::IsValidUtf8("hello \xD0\xBC\xD0\xB8\xD1\x80"));
+}
+
+TEST(StringUtilsTest, SanitizeUtf8LossyReplacesInvalidBytes) {
+    std::string bad = "abc";
+    bad.push_back(static_cast<char>(0x8A));
+    bad += "z";
+
+    std::string sanitized = dc::common::SanitizeUtf8Lossy(bad);
+    EXPECT_TRUE(dc::common::IsValidUtf8(sanitized));
+    EXPECT_EQ(sanitized, "abc\xEF\xBF\xBDz");
+}
+
 TEST(TimeUtilsTest, NowUtcIso8601HasExpectedFormat) {
     std::string now = dc::common::NowUtcIso8601();
     EXPECT_TRUE(IsIso8601Utc(now));
