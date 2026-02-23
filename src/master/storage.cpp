@@ -185,14 +185,9 @@ std::vector<AgentRecord> Storage::ListAgents(const std::optional<AgentStatus>& s
     return agents;
 }
 
-CreateTaskResult Storage::CreateTask(const TaskInput& task) {
+std::int64_t Storage::CreateTask(const TaskInput& task) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
-
-    auto exists = tx.exec_params("SELECT 1 FROM tasks WHERE task_id = $1", task.task_id);
-    if (!exists.empty()) {
-        return CreateTaskResult::AlreadyExists;
-    }
 
     std::string args_json = task.args.is_null() ? "[]" : task.args.dump();
     std::string env_json = task.env.is_null() ? "{}" : task.env.dump();
@@ -207,23 +202,25 @@ CreateTaskResult Storage::CreateTask(const TaskInput& task) {
     json constraints = NormalizeConstraints(task.constraints);
     std::string constraints_json = constraints.dump();
 
-    tx.exec_params(
-        "INSERT INTO tasks (task_id, state, command, args, env, timeout_sec, "
+    auto inserted = tx.exec_params(
+        "INSERT INTO tasks (state, command, args, env, timeout_sec, "
         "constraints, assigned_agent, created_at) VALUES "
-        "($1, 'Queued', $2, $3::jsonb, $4::jsonb, $5::int, $6::jsonb, NULL, NOW())",
-        task.task_id,
+        "('Queued', $1, $2::jsonb, $3::jsonb, $4::int, $5::jsonb, NULL, NOW()) "
+        "RETURNING task_id",
         task.command,
         args_json,
         env_json,
         timeout_param,
         constraints_json);
 
+    std::int64_t task_id = inserted[0]["task_id"].as<std::int64_t>();
+
     tx.commit();
-    spdlog::debug("DB task created: {}", task.task_id);
-    return CreateTaskResult::Ok;
+    spdlog::debug("DB task created: {}", task_id);
+    return task_id;
 }
 
-std::optional<TaskRecord> Storage::GetTask(const std::string& task_id) {
+std::optional<TaskRecord> Storage::GetTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -245,7 +242,7 @@ std::optional<TaskRecord> Storage::GetTask(const std::string& task_id) {
 
     const auto& row = result[0];
     TaskRecord record;
-    record.task_id = row["task_id"].c_str();
+    record.task_id = row["task_id"].as<std::int64_t>();
     record.state = TaskStateFromApi(row["state"].c_str()).value_or(TaskState::Queued);
     record.command = row["command"].c_str();
     record.args = ParseJsonOrDefault(row["args"].c_str(), json::array());
@@ -303,7 +300,7 @@ std::vector<TaskSummary> Storage::ListTasks(const std::optional<TaskState>& stat
     tasks.reserve(result.size());
     for (const auto& row : result) {
         TaskSummary summary;
-        summary.task_id = row["task_id"].c_str();
+        summary.task_id = row["task_id"].as<std::int64_t>();
         summary.state = TaskStateFromApi(row["state"].c_str()).value_or(TaskState::Queued);
         tasks.push_back(std::move(summary));
     }
@@ -359,7 +356,7 @@ std::optional<std::vector<TaskDispatch>> Storage::PollTasksForAgent(
 
     for (const auto& row : tasks_result) {
         TaskDispatch dispatch;
-        dispatch.task_id = row["task_id"].c_str();
+        dispatch.task_id = row["task_id"].as<std::int64_t>();
         dispatch.command = row["command"].c_str();
         dispatch.args = ParseJsonOrDefault(row["args"].c_str(), json::array());
         dispatch.env = ParseJsonOrDefault(row["env"].c_str(), json::object());
@@ -400,7 +397,7 @@ std::optional<std::vector<TaskDispatch>> Storage::PollTasksForAgent(
     return dispatches;
 }
 
-bool Storage::UpdateTaskStatus(const std::string& task_id,
+bool Storage::UpdateTaskStatus(std::int64_t task_id,
                                TaskState state,
                                const std::optional<int>& exit_code,
                                const std::optional<std::string>& started_at,
@@ -485,7 +482,7 @@ bool Storage::UpdateTaskStatus(const std::string& task_id,
     return true;
 }
 
-CancelTaskResult Storage::CancelTask(const std::string& task_id) {
+CancelTaskResult Storage::CancelTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 

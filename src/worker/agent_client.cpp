@@ -1,6 +1,7 @@
 #include "agent_client.h"
 
 #include <chrono>
+#include <cstdint>
 #include <sstream>
 
 #include "common/string_utils.h"
@@ -136,7 +137,11 @@ bool AgentClient::PollTasks(const std::string& agent_id,
             if (!item.contains("task_id") || !item.contains("command")) {
                 continue;
             }
-            dispatch.task_id = item["task_id"].get<std::string>();
+            if (item["task_id"].is_number_integer()) {
+                dispatch.task_id = std::to_string(item["task_id"].get<std::int64_t>());
+            } else {
+                continue;
+            }
             dispatch.command = item["command"].get<std::string>();
             if (item.contains("args") && item["args"].is_array()) {
                 for (const auto& arg : item["args"]) {

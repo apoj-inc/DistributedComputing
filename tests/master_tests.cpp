@@ -139,21 +139,21 @@ TEST(ApiMappersTest, ParseTaskCreateRequiresFields) {
     dc::master::TaskInput out;
     std::string error;
     EXPECT_FALSE(dc::master::api::ParseTaskCreate(nlohmann::json::object(), &out, &error));
-    EXPECT_EQ(error, "Missing task_id");
+    EXPECT_EQ(error, "Missing command");
 }
 
-TEST(ApiMappersTest, ParseTaskCreateValidatesTaskId) {
+TEST(ApiMappersTest, ParseTaskCreateRequiresCommandString) {
     dc::master::TaskInput out;
     std::string error;
-    nlohmann::json payload{{"task_id", "bad.id"}, {"command", "run"}};
+    nlohmann::json payload{{"command", 123}};
     EXPECT_FALSE(dc::master::api::ParseTaskCreate(payload, &out, &error));
-    EXPECT_EQ(error, "Invalid task_id");
+    EXPECT_EQ(error, "Missing command");
 }
 
 TEST(ApiMappersTest, ParseTaskCreateAppliesDefaults) {
     dc::master::TaskInput out;
     std::string error;
-    nlohmann::json payload{{"task_id", "task_1"}, {"command", "run"}};
+    nlohmann::json payload{{"command", "run"}};
     EXPECT_TRUE(dc::master::api::ParseTaskCreate(payload, &out, &error));
     EXPECT_TRUE(out.args.is_array());
     EXPECT_TRUE(out.env.is_object());
@@ -165,7 +165,6 @@ TEST(ApiMappersTest, ParseTaskCreateReadsOptionalFields) {
     dc::master::TaskInput out;
     std::string error;
     nlohmann::json payload{
-        {"task_id", "task-2"},
         {"command", "run"},
         {"args", nlohmann::json::array({1, 2})},
         {"env", nlohmann::json{{"KEY", "VALUE"}}},
@@ -221,10 +220,13 @@ TEST(ApiMappersTest, ParseTaskStatusUpdateTreatsEmptyOptionalFieldsAsNullopt) {
     EXPECT_FALSE(out.error_message.has_value());
 }
 
-TEST(ApiMappersTest, IsValidTaskIdChecksCharacters) {
-    EXPECT_TRUE(dc::master::api::IsValidTaskId("task-1_ok"));
-    EXPECT_FALSE(dc::master::api::IsValidTaskId(""));
-    EXPECT_FALSE(dc::master::api::IsValidTaskId("bad.id"));
+TEST(ApiMappersTest, ParseTaskIdAcceptsOnlyPositiveIntegers) {
+    EXPECT_TRUE(dc::master::api::ParseTaskId("1").has_value());
+    EXPECT_TRUE(dc::master::api::ParseTaskId("12345").has_value());
+    EXPECT_FALSE(dc::master::api::ParseTaskId("").has_value());
+    EXPECT_FALSE(dc::master::api::ParseTaskId("0").has_value());
+    EXPECT_FALSE(dc::master::api::ParseTaskId("-1").has_value());
+    EXPECT_FALSE(dc::master::api::ParseTaskId("bad.id").has_value());
 }
 
 TEST(ApiMappersTest, IsValidTaskStateTransitionMatrix) {
@@ -244,7 +246,7 @@ TEST(ApiMappersTest, IsValidTaskStateTransitionMatrix) {
 
 TEST(ApiMappersTest, TaskRecordToJsonIncludesOptionals) {
     dc::master::TaskRecord record;
-    record.task_id = "task-1";
+    record.task_id = 1;
     record.state = dc::master::TaskState::Running;
     record.command = "run";
     record.args = nlohmann::json::array({1});
@@ -259,7 +261,7 @@ TEST(ApiMappersTest, TaskRecordToJsonIncludesOptionals) {
     record.constraints = nlohmann::json::object();
 
     auto json = dc::master::api::TaskRecordToJson(record);
-    EXPECT_EQ(json["task_id"], "task-1");
+    EXPECT_EQ(json["task_id"], 1);
     EXPECT_EQ(json["state"], "running");
     EXPECT_EQ(json["timeout_sec"], 10);
     EXPECT_EQ(json["assigned_agent"], "agent-1");
@@ -270,7 +272,7 @@ TEST(ApiMappersTest, TaskRecordToJsonIncludesOptionals) {
 
 TEST(ApiMappersTest, TaskDispatchToJsonSkipsNullConstraints) {
     dc::master::TaskDispatch dispatch;
-    dispatch.task_id = "task-1";
+    dispatch.task_id = 1;
     dispatch.command = "run";
     dispatch.args = nlohmann::json::array();
     dispatch.env = nlohmann::json::object();

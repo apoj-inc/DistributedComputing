@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -46,7 +47,6 @@ struct AgentRecord {
 };
 
 struct TaskInput {
-    std::string task_id;
     std::string command;
     nlohmann::json args;
     nlohmann::json env;
@@ -55,7 +55,7 @@ struct TaskInput {
 };
 
 struct TaskRecord {
-    std::string task_id;
+    std::int64_t task_id = 0;
     TaskState state = TaskState::Queued;
     std::string command;
     nlohmann::json args;
@@ -71,23 +71,17 @@ struct TaskRecord {
 };
 
 struct TaskSummary {
-    std::string task_id;
+    std::int64_t task_id = 0;
     TaskState state = TaskState::Queued;
 };
 
 struct TaskDispatch {
-    std::string task_id;
+    std::int64_t task_id = 0;
     std::string command;
     nlohmann::json args;
     nlohmann::json env;
     std::optional<int> timeout_sec;
     nlohmann::json constraints;
-};
-
-enum class CreateTaskResult {
-    Ok,
-    AlreadyExists,
-    Error,
 };
 
 enum class CancelTaskResult {
@@ -109,8 +103,8 @@ public:
                                         int limit,
                                         int offset);
 
-    CreateTaskResult CreateTask(const TaskInput& task);
-    std::optional<TaskRecord> GetTask(const std::string& task_id);
+    std::int64_t CreateTask(const TaskInput& task);
+    std::optional<TaskRecord> GetTask(std::int64_t task_id);
     std::vector<TaskSummary> ListTasks(const std::optional<TaskState>& state,
                                        const std::optional<std::string>& agent_id,
                                        int limit,
@@ -120,14 +114,14 @@ public:
     std::optional<std::vector<TaskDispatch>> PollTasksForAgent(const std::string& agent_id,
                                                                int free_slots);
 
-    bool UpdateTaskStatus(const std::string& task_id,
+    bool UpdateTaskStatus(std::int64_t task_id,
                           TaskState state,
                           const std::optional<int>& exit_code,
                           const std::optional<std::string>& started_at,
                           const std::optional<std::string>& finished_at,
                           const std::optional<std::string>& error_message);
 
-    CancelTaskResult CancelTask(const std::string& task_id);
+    CancelTaskResult CancelTask(std::int64_t task_id);
 
     // Marks agents offline and requeues tasks assigned to them.
     int MarkOfflineAgentsAndRequeue(int offline_after_sec);

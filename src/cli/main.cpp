@@ -105,15 +105,28 @@ std::optional<int> ParseInt(const std::string& value) {
 }
 
 bool IsValidTaskId(const std::string& task_id) {
-    if (task_id.empty() || task_id.size() > 128) {
+    if (task_id.empty()) {
         return false;
     }
     for (char c : task_id) {
-        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
             return false;
         }
     }
     return true;
+}
+
+std::string ReadTaskIdAsString(const json& payload) {
+    if (!payload.contains("task_id")) {
+        return "";
+    }
+    if (payload["task_id"].is_number_integer()) {
+        return std::to_string(payload["task_id"].get<long long>());
+    }
+    if (payload["task_id"].is_string()) {
+        return payload["task_id"].get<std::string>();
+    }
+    return "";
 }
 
 std::string EnsureScheme(const std::string& base_url) {
@@ -233,7 +246,7 @@ void PrintUsage() {
         << "  --verbose              Print request info to stderr\n"
         << "  -h, --help             Show help\n\n"
         << "Tasks commands:\n"
-        << "  tasks submit|add --id <id> --cmd <command> [--arg <arg>]... [--env K=V]...\n"
+        << "  tasks submit|add --cmd <command> [--arg <arg>]... [--env K=V]...\n"
         << "                   [--timeout <sec>] [--os <os>] [--cpu <n>] [--ram <mb>]\n"
         << "                   [--label <label>]...\n"
         << "  tasks list|ls [--state <state>] [--agent-id <id>] [--limit N] [--offset N]\n"
@@ -403,7 +416,7 @@ int HandleTasksList(const ApiClientInterface& client,
 
     std::vector<std::vector<std::string>> rows;
     for (const auto& task : parsed["tasks"]) {
-        rows.push_back({task.value("task_id", ""), task.value("state", "")});
+        rows.push_back({ReadTaskIdAsString(task), task.value("state", "")});
     }
     PrintTable(std::cout, {"Task ID", "State"}, rows);
     return 0;
@@ -447,7 +460,7 @@ int HandleTasksGet(const ApiClientInterface& client,
     }
     const auto& task = parsed["task"];
     std::vector<std::pair<std::string, std::string>> rows;
-    rows.emplace_back("task_id", task.value("task_id", ""));
+    rows.emplace_back("task_id", ReadTaskIdAsString(task));
     rows.emplace_back("state", task.value("state", ""));
     rows.emplace_back("command", task.value("command", ""));
     if (task.contains("args")) {
@@ -520,7 +533,6 @@ int HandleTasksCancel(const ApiClientInterface& client,
 int HandleTasksSubmit(const ApiClientInterface& client,
                       const GlobalOptions& options,
                       const std::vector<std::string>& args) {
-    std::string task_id;
     std::string command;
     std::vector<std::string> cmd_args;
     std::vector<std::pair<std::string, std::string>> env;
@@ -533,15 +545,6 @@ int HandleTasksSubmit(const ApiClientInterface& client,
 
     for (std::size_t i = 0; i < args.size(); ++i) {
         std::string value;
-        if (ConsumeOptionValue(args, &i, "--id", &value, &error) ||
-            ConsumeOptionValue(args, &i, "--task-id", &value, &error)) {
-            if (!error.empty()) {
-                std::cerr << error << '\n';
-                return 1;
-            }
-            task_id = value;
-            continue;
-        }
         if (ConsumeOptionValue(args, &i, "--cmd", &value, &error) ||
             ConsumeOptionValue(args, &i, "--command", &value, &error)) {
             if (!error.empty()) {
@@ -636,17 +639,12 @@ int HandleTasksSubmit(const ApiClientInterface& client,
         return 1;
     }
 
-    if (task_id.empty() || command.empty()) {
-        std::cerr << "Missing required --id and/or --cmd" << '\n';
-        return 1;
-    }
-    if (!IsValidTaskId(task_id)) {
-        std::cerr << "Invalid task_id" << '\n';
+    if (command.empty()) {
+        std::cerr << "Missing required --cmd" << '\n';
         return 1;
     }
 
     json body;
-    body["task_id"] = task_id;
     body["command"] = command;
     body["args"] = json::array();
     for (const auto& arg : cmd_args) {
@@ -689,6 +687,17 @@ int HandleTasksSubmit(const ApiClientInterface& client,
     if (options.json_output) {
         std::cout << result.body << '\n';
         return 0;
+    }
+
+    auto parsed = json::parse(result.body, nullptr, false);
+    if (parsed.is_discarded()) {
+        std::cerr << "Invalid response" << '\n';
+        return 4;
+    }
+    std::string task_id = ReadTaskIdAsString(parsed);
+    if (task_id.empty()) {
+        std::cerr << "Invalid response: missing task_id" << '\n';
+        return 4;
     }
 
     PrintKeyValueTable(std::cout, {std::make_pair("task_id", task_id)});

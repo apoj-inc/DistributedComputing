@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
@@ -489,16 +490,15 @@ TEST_F(WorkerIntegrationTest, RunsTaskAndReportsSuccess) {
     auto client = MakeClient(state.config);
 
     const std::string agent_id = MakeId("agent");
-    const std::string task_id = MakeId("task");
     json task_payload = {
-        {"task_id", task_id},
         {"command", "/bin/sh"},
         {"args", json::array({"-c", "echo worker ok"})},
     };
 
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
-                              "application/json"),
-                 201);
+    auto create_res = client->Post("/api/v1/tasks", task_payload.dump(), "application/json");
+    ExpectStatus(create_res, 201);
+    auto create_body = json::parse(create_res->body);
+    const std::string task_id = std::to_string(create_body["task_id"].get<std::int64_t>());
 
     std::map<std::string, std::string> worker_env;
     worker_env["MASTER_URL"] = "http://" + state.config.master_host + ":" +

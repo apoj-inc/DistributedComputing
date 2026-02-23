@@ -60,6 +60,10 @@ std::optional<std::string> GetQueryParam(const httplib::Request& req,
     return it->second;
 }
 
+std::optional<std::int64_t> ParseTaskIdParam(const std::string& raw) {
+    return api::ParseTaskId(raw);
+}
+
 int GetQueryParamInt(const httplib::Request& req, const std::string& name, int fallback) {
     auto value = GetQueryParam(req, name);
     if (!value) {
@@ -269,50 +273,41 @@ void ControlService::HandleCreateTask(const httplib::Request& req,
         return;
     }
 
-    CreateTaskResult result;
+    std::int64_t created_task_id = 0;
     try {
-        result = storage_.CreateTask(task);
+        created_task_id = storage_.CreateTask(task);
     } catch (const std::exception& ex) {
-        spdlog::error("DB error creating task {}: {}", task.task_id, ex.what());
+        spdlog::error("DB error creating task: {}", ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
 
-    if (result == CreateTaskResult::AlreadyExists) {
-        SetJsonResponse(res, MakeError("TASK_EXISTS", "Task already exists",
-                                       {{"task_id", task.task_id}}), 409);
-        return;
-    }
-    if (result != CreateTaskResult::Ok) {
-        SetJsonResponse(res, MakeError("DB_ERROR", "Failed to create task"), 500);
-        return;
-    }
-
-    spdlog::info("Task created: {}", task.task_id);
+    spdlog::info("Task created: {}", created_task_id);
     json response;
-    response["task_id"] = task.task_id;
+    response["task_id"] = created_task_id;
     SetJsonResponse(res, response, 201);
 }
 
 void ControlService::HandleGetTask(const httplib::Request& req,
                                    httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
     std::optional<TaskRecord> task;
     try {
-        task = storage_.GetTask(task_id);
+        task = storage_.GetTask(*task_id);
     } catch (const std::exception& ex) {
-        spdlog::error("DB error fetching task {}: {}", task_id, ex.what());
+        spdlog::error("DB error fetching task {}: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
 
     if (!task) {
         SetJsonResponse(res, MakeError("TASK_NOT_FOUND", "Task not found",
-                                       {{"task_id", task_id}}), 404);
+                                       {{"task_id", *task_id}}), 404);
         return;
     }
 
@@ -362,8 +357,9 @@ void ControlService::HandleListTasks(const httplib::Request& req,
 
 void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
                                             httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
@@ -382,15 +378,15 @@ void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
 
     std::optional<TaskRecord> current;
     try {
-        current = storage_.GetTask(task_id);
+        current = storage_.GetTask(*task_id);
     } catch (const std::exception& ex) {
-        spdlog::error("DB error fetching task {} for update: {}", task_id, ex.what());
+        spdlog::error("DB error fetching task {} for update: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
     if (!current) {
         SetJsonResponse(res, MakeError("TASK_NOT_FOUND", "Task not found",
-                                       {{"task_id", task_id}}), 404);
+                                       {{"task_id", *task_id}}), 404);
         return;
     }
     if (!api::IsValidTaskStateTransition(current->state, update.state)) {
@@ -403,24 +399,24 @@ void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
     }
 
     try {
-        if (!storage_.UpdateTaskStatus(task_id,
+        if (!storage_.UpdateTaskStatus(*task_id,
                                        update.state,
                                        update.exit_code,
                                        update.started_at,
                                        update.finished_at,
                                        update.error_message)) {
             SetJsonResponse(res, MakeError("TASK_NOT_FOUND", "Task not found",
-                                           {{"task_id", task_id}}), 404);
+                                           {{"task_id", *task_id}}), 404);
             return;
         }
     } catch (const std::exception& ex) {
-        spdlog::error("DB error updating task {}: {}", task_id, ex.what());
+        spdlog::error("DB error updating task {}: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
 
     spdlog::info("Task status updated: {} {} -> {}",
-                 task_id,
+                 *task_id,
                  TaskStateToApi(current->state),
                  TaskStateToApi(update.state));
     SetJsonResponse(res, json{{"status", "ok"}}, 200);
@@ -428,29 +424,30 @@ void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
 
 void ControlService::HandleCancelTask(const httplib::Request& req,
                                       httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
     CancelTaskResult result;
     try {
-        result = storage_.CancelTask(task_id);
+        result = storage_.CancelTask(*task_id);
     } catch (const std::exception& ex) {
-        spdlog::error("DB error canceling task {}: {}", task_id, ex.what());
+        spdlog::error("DB error canceling task {}: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
 
     if (result == CancelTaskResult::NotFound) {
         SetJsonResponse(res, MakeError("TASK_NOT_FOUND", "Task not found",
-                                       {{"task_id", task_id}}), 404);
+                                       {{"task_id", *task_id}}), 404);
         return;
     }
     if (result == CancelTaskResult::InvalidState) {
         SetJsonResponse(res, MakeError("TASK_INVALID_STATE",
                                        "Task already finished; cannot cancel",
-                                       {{"task_id", task_id}}),
+                                       {{"task_id", *task_id}}),
                         409);
         return;
     }
@@ -459,7 +456,7 @@ void ControlService::HandleCancelTask(const httplib::Request& req,
         return;
     }
 
-    spdlog::info("Task canceled: {}", task_id);
+    spdlog::info("Task canceled: {}", *task_id);
     SetJsonResponse(res, json{{"status", "ok"}}, 200);
 }
 
@@ -524,8 +521,9 @@ void ControlService::HandleListAgents(const httplib::Request& req,
 
 void ControlService::HandleGetLogs(const httplib::Request& req,
                                    httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
@@ -535,10 +533,10 @@ void ControlService::HandleGetLogs(const httplib::Request& req,
         return;
     }
 
-    auto log_result = log_store_.ReadAll(task_id, stream);
+    auto log_result = log_store_.ReadAll(std::to_string(*task_id), stream);
     if (!log_result.exists) {
         SetJsonResponse(res, MakeError("LOG_NOT_FOUND", "Log not found",
-                                       {{"task_id", task_id}, {"stream", stream}}), 404);
+                                       {{"task_id", *task_id}, {"stream", stream}}), 404);
         return;
     }
 
@@ -548,8 +546,9 @@ void ControlService::HandleGetLogs(const httplib::Request& req,
 
 void ControlService::HandleTailLogs(const httplib::Request& req,
                                     httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
@@ -568,10 +567,10 @@ void ControlService::HandleTailLogs(const httplib::Request& req,
         }
     }
 
-    auto log_result = log_store_.ReadFromOffset(task_id, stream, offset);
+    auto log_result = log_store_.ReadFromOffset(std::to_string(*task_id), stream, offset);
     if (!log_result.exists) {
         SetJsonResponse(res, MakeError("LOG_NOT_FOUND", "Log not found",
-                                       {{"task_id", task_id}, {"stream", stream}}), 404);
+                                       {{"task_id", *task_id}, {"stream", stream}}), 404);
         return;
     }
 
@@ -582,8 +581,9 @@ void ControlService::HandleTailLogs(const httplib::Request& req,
 
 void ControlService::HandleUploadLogs(const httplib::Request& req,
                                       httplib::Response& res) {
-    const std::string task_id = req.matches[1];
-    if (!api::IsValidTaskId(task_id)) {
+    const std::string task_id_raw = req.matches[1];
+    auto task_id = ParseTaskIdParam(task_id_raw);
+    if (!task_id) {
         SetJsonResponse(res, MakeError("BAD_REQUEST", "Invalid task_id"), 400);
         return;
     }
@@ -615,7 +615,7 @@ void ControlService::HandleUploadLogs(const httplib::Request& req,
         return;
     }
 
-    if (!log_store_.WriteAll(task_id, stream, data)) {
+    if (!log_store_.WriteAll(std::to_string(*task_id), stream, data)) {
         SetJsonResponse(res, MakeError("LOG_WRITE_FAILED", "Failed to store log"), 500);
         return;
     }

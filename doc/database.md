@@ -26,7 +26,7 @@
 - last_heartbeat (timestamptz)
 
 ### 4.2 tasks
-- task_id (PK, text)
+- task_id (PK, bigserial)
 - state (task_state)
 - command (text)
 - args (jsonb) — массив строк
@@ -42,7 +42,7 @@
 
 ### 4.3 task_assignments
 - id (bigserial, PK)
-- task_id (FK -> tasks.task_id)
+- task_id (bigint, FK -> tasks.task_id)
 - agent_id (FK -> agents.agent_id)
 - assigned_at (timestamptz)
 - unassigned_at (timestamptz, nullable)

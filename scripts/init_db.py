@@ -98,7 +98,7 @@ def create_schema(conn):
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
-                task_id TEXT PRIMARY KEY,
+                task_id BIGSERIAL PRIMARY KEY,
                 state task_state NOT NULL,
                 command TEXT NOT NULL,
                 args JSONB NOT NULL,
@@ -120,7 +120,7 @@ def create_schema(conn):
             """
             CREATE TABLE IF NOT EXISTS task_assignments (
                 id BIGSERIAL PRIMARY KEY,
-                task_id TEXT NOT NULL,
+                task_id BIGINT NOT NULL,
                 agent_id TEXT NOT NULL,
                 assigned_at TIMESTAMPTZ NOT NULL,
                 unassigned_at TIMESTAMPTZ,
@@ -184,7 +184,7 @@ def expected_schema():
             },
             "tasks": {
                 "columns": {
-                    "task_id": ("text", False),
+                    "task_id": ("bigserial", False),
                     "state": ("task_state", False),
                     "command": ("text", False),
                     "args": ("jsonb", False),
@@ -212,7 +212,7 @@ def expected_schema():
             "task_assignments": {
                 "columns": {
                     "id": ("bigserial", False),
-                    "task_id": ("text", False),
+                    "task_id": ("bigint", False),
                     "agent_id": ("text", False),
                     "assigned_at": ("timestamp with time zone", False),
                     "unassigned_at": ("timestamp with time zone", True),

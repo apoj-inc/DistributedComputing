@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -41,7 +42,7 @@ nlohmann::json TaskRecordToJson(const TaskRecord& task);
 nlohmann::json TaskSummaryToJson(const TaskSummary& task);
 nlohmann::json TaskDispatchToJson(const TaskDispatch& task);
 
-bool IsValidTaskId(const std::string& task_id);
+std::optional<std::int64_t> ParseTaskId(const std::string& task_id);
 bool IsValidTaskStateTransition(TaskState from, TaskState to);
 
 }  // namespace api

@@ -6,6 +6,7 @@
 #include <pqxx/pqxx>
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -148,6 +149,21 @@ std::string MakeTempDir() {
     std::filesystem::path dir = base / ("cli_" + std::to_string(pid) + "_" + std::to_string(stamp));
     std::filesystem::create_directories(dir, ec);
     return dir.string();
+}
+
+std::optional<std::string> ExtractNumericToken(const std::string& text) {
+    std::string token;
+    for (char c : text) {
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            token.push_back(c);
+        } else if (!token.empty()) {
+            return token;
+        }
+    }
+    if (!token.empty()) {
+        return token;
+    }
+    return std::nullopt;
 }
 
 class DbHelper {
@@ -422,15 +438,16 @@ TEST_F(CliIntegrationTest, TasksSubmitAndListAgainstMaster) {
 
     auto client = MakeClient();
     auto options = MakeOptions();
-    std::string task_id = MakeId("task");
-    std::vector<std::string> submit_args = {"--id", task_id, "--cmd", "/bin/true"};
+    std::vector<std::string> submit_args = {"--cmd", "/bin/true"};
 
     testing::internal::CaptureStdout();
     int submit_code = dc::cli::HandleTasksSubmit(client, options, submit_args);
     std::string submit_out = testing::internal::GetCapturedStdout();
 
     EXPECT_EQ(submit_code, 0);
-    EXPECT_NE(submit_out.find(task_id), std::string::npos);
+    auto submitted_task_id = ExtractNumericToken(submit_out);
+    ASSERT_TRUE(submitted_task_id.has_value());
+    const std::string task_id = *submitted_task_id;
     EXPECT_EQ(db_->GetTaskStateLower(task_id), "queued");
 
     testing::internal::CaptureStdout();

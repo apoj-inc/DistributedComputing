@@ -84,7 +84,8 @@ TEST(CliUtilsTest, StartsWithAndParseInt) {
 }
 
 TEST(CliUtilsTest, ValidatesTaskIdAndScheme) {
-    EXPECT_TRUE(dc::cli::IsValidTaskId("task_1-OK"));
+    EXPECT_TRUE(dc::cli::IsValidTaskId("123"));
+    EXPECT_FALSE(dc::cli::IsValidTaskId("task_1-OK"));
     EXPECT_FALSE(dc::cli::IsValidTaskId("bad id"));
 
     EXPECT_EQ(dc::cli::EnsureScheme("example.com"), "http://example.com");
@@ -180,24 +181,24 @@ TEST(CliHandlersTest, HandleTasksListRendersTableAndRecordsRequest) {
 
 TEST(CliHandlersTest, HandleTasksSubmitBuildsPayloadAndPosts) {
     FakeApiClient client;
-    client.post_results.push_back(dc::cli::HttpResult{200, R"({"status":"ok"})", {}, ""});
+    client.post_results.push_back(dc::cli::HttpResult{201, R"({"task_id":42})", {}, ""});
 
     dc::cli::GlobalOptions options;
     std::vector<std::string> args = {
-        "--id", "task-1", "--cmd", "echo", "--arg", "hello", "--env", "KEY=VALUE",
-        "--cpu", "2",     "--ram", "256",  "--label", "gpu"};
+        "--cmd", "echo", "--arg", "hello", "--env", "KEY=VALUE",
+        "--cpu", "2",    "--ram", "256",  "--label", "gpu"};
 
     testing::internal::CaptureStdout();
     int code = dc::cli::HandleTasksSubmit(client, options, args);
     std::string output = testing::internal::GetCapturedStdout();
 
     EXPECT_EQ(code, 0);
-    EXPECT_NE(output.find("task-1"), std::string::npos);
+    EXPECT_NE(output.find("42"), std::string::npos);
     ASSERT_EQ(client.requests.size(), 1u);
     EXPECT_EQ(client.requests[0].path, "/api/v1/tasks");
 
     auto body = nlohmann::json::parse(client.requests[0].body);
-    EXPECT_EQ(body["task_id"], "task-1");
+    EXPECT_FALSE(body.contains("task_id"));
     EXPECT_EQ(body["command"], "echo");
     EXPECT_EQ(body["args"][0], "hello");
     EXPECT_EQ(body["env"]["KEY"], "VALUE");

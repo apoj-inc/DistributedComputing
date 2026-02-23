@@ -307,7 +307,8 @@ components:
       name: task_id
       required: true
       schema:
-        type: string
+        type: integer
+        format: int64
   responses:
     ErrorResponse:
       description: Error response
@@ -368,7 +369,8 @@ components:
         running_tasks:
           type: array
           items:
-            type: string
+            type: integer
+            format: int64
         free_slots:
           type: integer
         timestamp:
@@ -407,10 +409,8 @@ components:
           type: string
     SubmitTaskRequest:
       type: object
-      required: [task_id, command]
+      required: [command]
       properties:
-        task_id:
-          type: string
         command:
           type: string
         args:
@@ -430,7 +430,8 @@ components:
       required: [task_id]
       properties:
         task_id:
-          type: string
+          type: integer
+          format: int64
     TaskListResponse:
       type: object
       required: [tasks]
@@ -488,7 +489,8 @@ components:
       required: [task_id, command]
       properties:
         task_id:
-          type: string
+          type: integer
+          format: int64
         command:
           type: string
         args:
@@ -508,7 +510,8 @@ components:
       required: [task_id, state, command, created_at]
       properties:
         task_id:
-          type: string
+          type: integer
+          format: int64
         state:
           type: string
           enum: [queued, running, succeeded, failed, canceled]
@@ -565,7 +568,8 @@ components:
       required: [task_id, state]
       properties:
         task_id:
-          type: string
+          type: integer
+          format: int64
         state:
           type: string
           enum: [queued, running, succeeded, failed, canceled]

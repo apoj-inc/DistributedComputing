@@ -49,7 +49,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 - `last_heartbeat` (string, ISO 8601)
 
 ### 3.2 Task
-- `task_id` (string, required)
+- `task_id` (int64, required)
 - `state` (string; `queued`, `running`, `succeeded`, `failed`, `canceled`)
 - `command` (string, required)
 - `args` (array[string])
@@ -119,7 +119,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 {
   "tasks": [
     {
-      "task_id": "task-123",
+      "task_id": 123,
       "command": "solver.exe",
       "args": ["--size", "1000"],
       "env": { "OMP_NUM_THREADS": "4" },
@@ -158,7 +158,6 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 Тело запроса:
 ```
 {
-  "task_id": "task-123",
   "command": "solver",
   "args": ["--size", "1000"],
   "env": { "OMP_NUM_THREADS": "4" },
@@ -169,7 +168,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 
 Ответ `201`:
 ```
-{ "task_id": "task-123" }
+{ "task_id": 123 }
 ```
 
 ### 5.2 Список задач
@@ -177,7 +176,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 
 Ответ `200`:
 ```
-{ "tasks": [ { "task_id": "task-123", "state": "running" } ] }
+{ "tasks": [ { "task_id": 123, "state": "running" } ] }
 ```
 
 ### 5.3 Детали задачи
@@ -185,7 +184,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
 
 Ответ `200`:
 ```
-{ "task": { "task_id": "task-123", "state": "running" } }
+{ "task": { "task_id": 123, "state": "running" } }
 ```
 
 ### 5.4 Отмена задачи
@@ -259,7 +258,7 @@ CLI -> Master: GET /tasks/{task_id}/logs?stream=stdout
   "error": {
     "code": "TASK_NOT_FOUND",
     "message": "Task does not exist",
-    "details": { "task_id": "task-123" }
+    "details": { "task_id": 123 }
   }
 }
 ```

@@ -1,6 +1,7 @@
 #include "api_mappers.h"
 
 #include <cctype>
+#include <limits>
 
 #include "status.h"
 
@@ -99,12 +100,6 @@ bool ParseTaskCreate(const nlohmann::json& body, TaskInput* out, std::string* er
         }
         return false;
     }
-    if (!body.contains("task_id") || !body["task_id"].is_string()) {
-        if (error) {
-            *error = "Missing task_id";
-        }
-        return false;
-    }
     if (!body.contains("command") || !body["command"].is_string()) {
         if (error) {
             *error = "Missing command";
@@ -112,13 +107,6 @@ bool ParseTaskCreate(const nlohmann::json& body, TaskInput* out, std::string* er
         return false;
     }
 
-    out->task_id = body["task_id"].get<std::string>();
-    if (!IsValidTaskId(out->task_id)) {
-        if (error) {
-            *error = "Invalid task_id";
-        }
-        return false;
-    }
     out->command = body["command"].get<std::string>();
     out->args = (body.contains("args") && body["args"].is_array()) ? body["args"]
                                                                    : nlohmann::json::array();
@@ -243,16 +231,27 @@ nlohmann::json TaskDispatchToJson(const TaskDispatch& task) {
     return payload;
 }
 
-bool IsValidTaskId(const std::string& task_id) {
-    if (task_id.empty() || task_id.size() > 128) {
-        return false;
+std::optional<std::int64_t> ParseTaskId(const std::string& task_id) {
+    if (task_id.empty()) {
+        return std::nullopt;
     }
     for (char c : task_id) {
-        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')) {
-            return false;
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            return std::nullopt;
         }
     }
-    return true;
+    try {
+        long long parsed = std::stoll(task_id);
+        if (parsed <= 0) {
+            return std::nullopt;
+        }
+        if (parsed > std::numeric_limits<std::int64_t>::max()) {
+            return std::nullopt;
+        }
+        return static_cast<std::int64_t>(parsed);
+    } catch (...) {
+        return std::nullopt;
+    }
 }
 
 bool IsValidTaskStateTransition(TaskState from, TaskState to) {

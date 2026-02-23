@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
@@ -598,6 +599,18 @@ void ExpectStatus(const httplib::Result& res, int status) {
     ASSERT_EQ(res->status, status);
 }
 
+std::string TaskIdToString(const json& value) {
+    return std::to_string(value.get<std::int64_t>());
+}
+
+std::string SubmitTask(httplib::Client* client, const json& payload) {
+    auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
+    ExpectStatus(res, 201);
+    auto body = json::parse(res->body);
+    EXPECT_TRUE(body.contains("task_id"));
+    return TaskIdToString(body["task_id"]);
+}
+
 TEST_F(MasterIntegrationTest, RegisterAgentAndHeartbeat) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
@@ -816,10 +829,7 @@ TEST_F(MasterIntegrationTest, PollFreeSlotsZeroAndNegative) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id = MakeId("task_poll_zero");
-    json task_payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll_zero = {{"free_slots", 0}};
     auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -921,9 +931,7 @@ TEST_F(MasterIntegrationTest, SubmitTaskAndGet) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task");
     json payload = {
-        {"task_id", task_id},
         {"command", "echo"},
         {"args", json::array({"hello"})},
         {"env", {{"KEY", "VALUE"}}},
@@ -935,7 +943,7 @@ TEST_F(MasterIntegrationTest, SubmitTaskAndGet) {
     ASSERT_TRUE(res);
     ASSERT_EQ(res->status, 201);
     auto body = json::parse(res->body);
-    EXPECT_EQ(body["task_id"], task_id);
+    std::string task_id = TaskIdToString(body["task_id"]);
 
     EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
     EXPECT_EQ(state.db->GetConstraintOs(task_id).value_or(""), "linux");
@@ -945,25 +953,17 @@ TEST_F(MasterIntegrationTest, SubmitTaskAndGet) {
     ASSERT_TRUE(res);
     ASSERT_EQ(res->status, 200);
     body = json::parse(res->body);
-    EXPECT_EQ(body["task"]["task_id"], task_id);
+    EXPECT_EQ(TaskIdToString(body["task"]["task_id"]), task_id);
     EXPECT_EQ(body["task"]["state"], "queued");
-
-    res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
-    ExpectErrorCode(res, 409, "TASK_EXISTS");
 }
 
 TEST_F(MasterIntegrationTest, SubmitTaskMissingFields) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    json payload_missing_id = {{"command", "echo"}};
-    auto res = client->Post("/api/v1/tasks", payload_missing_id.dump(),
+    json payload_missing_command = json::object();
+    auto res = client->Post("/api/v1/tasks", payload_missing_command.dump(),
                             "application/json");
-    ExpectErrorCode(res, 400, "BAD_REQUEST");
-
-    json payload_missing_command = {{"task_id", MakeId("task_missing_cmd")}};
-    res = client->Post("/api/v1/tasks", payload_missing_command.dump(),
-                       "application/json");
     ExpectErrorCode(res, 400, "BAD_REQUEST");
 }
 
@@ -971,9 +971,7 @@ TEST_F(MasterIntegrationTest, SubmitTaskInvalidTypesIgnored) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_bad_types");
     json payload = {
-        {"task_id", task_id},
         {"command", "echo"},
         {"args", "not-array"},
         {"env", json::array({"BAD"})},
@@ -982,6 +980,7 @@ TEST_F(MasterIntegrationTest, SubmitTaskInvalidTypesIgnored) {
     };
     auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
     ExpectStatus(res, 201);
+    std::string task_id = TaskIdToString(json::parse(res->body)["task_id"]);
 
     res = client->Get("/api/v1/tasks/" + task_id);
     ASSERT_TRUE(res);
@@ -1001,14 +1000,11 @@ TEST_F(MasterIntegrationTest, SubmitTaskLabelsSaved) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_labels");
     json payload = {
-        {"task_id", task_id},
         {"command", "echo"},
         {"constraints", {{"labels", json::array({"gpu", "ssd"})}}},
     };
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), payload);
 
     auto res = client->Get("/api/v1/tasks/" + task_id);
     ASSERT_TRUE(res);
@@ -1019,15 +1015,16 @@ TEST_F(MasterIntegrationTest, SubmitTaskLabelsSaved) {
     EXPECT_EQ(body["task"]["constraints"]["labels"], json::array({"gpu", "ssd"}));
 }
 
-TEST_F(MasterIntegrationTest, SubmitTaskInvalidId) {
+TEST_F(MasterIntegrationTest, SubmitTaskIgnoresClientTaskIdField) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = "bad$id";
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
+    json payload = {{"task_id", "bad$id"}, {"command", "echo"}};
     auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
-    ExpectErrorCode(res, 400, "BAD_REQUEST");
-    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "");
+    ExpectStatus(res, 201);
+    auto body = json::parse(res->body);
+    std::string task_id = TaskIdToString(body["task_id"]);
+    EXPECT_EQ(state.db->GetTaskStateLower(task_id), "queued");
 }
 
 TEST_F(MasterIntegrationTest, GetTaskInvalidId) {
@@ -1042,7 +1039,7 @@ TEST_F(MasterIntegrationTest, GetTaskUnknown) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_missing_get");
+    std::string task_id = "999999999";
     auto res = client->Get("/api/v1/tasks/" + task_id);
     ExpectErrorCode(res, 404, "TASK_NOT_FOUND");
 }
@@ -1060,14 +1057,8 @@ TEST_F(MasterIntegrationTest, ListTasksByState) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id1 = MakeId("task_list");
-    std::string task_id2 = MakeId("task_list");
-    json payload1 = {{"task_id", task_id1}, {"command", "echo"}};
-    json payload2 = {{"task_id", task_id2}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload1.dump(),
-                              "application/json"), 201);
-    ExpectStatus(client->Post("/api/v1/tasks", payload2.dump(),
-                              "application/json"), 201);
+    std::string task_id1 = SubmitTask(client.get(), json{{"command", "echo"}});
+    std::string task_id2 = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 1}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1101,15 +1092,9 @@ TEST_F(MasterIntegrationTest, ListTasksByAgentPagination) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id1 = MakeId("task_agent");
-    json payload1 = {{"task_id", task_id1}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload1.dump(),
-                              "application/json"), 201);
+    std::string task_id1 = SubmitTask(client.get(), json{{"command", "echo"}});
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    std::string task_id2 = MakeId("task_agent");
-    json payload2 = {{"task_id", task_id2}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload2.dump(),
-                              "application/json"), 201);
+    std::string task_id2 = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 2}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1121,7 +1106,7 @@ TEST_F(MasterIntegrationTest, ListTasksByAgentPagination) {
     ASSERT_EQ(res->status, 200);
     auto body = json::parse(res->body);
     ASSERT_EQ(body["tasks"].size(), 1);
-    EXPECT_EQ(body["tasks"][0]["task_id"], task_id2);
+    EXPECT_EQ(TaskIdToString(body["tasks"][0]["task_id"]), task_id2);
 
     res = client->Get("/api/v1/tasks?agent_id=" + agent_id +
                       "&limit=1&offset=1");
@@ -1129,7 +1114,7 @@ TEST_F(MasterIntegrationTest, ListTasksByAgentPagination) {
     ASSERT_EQ(res->status, 200);
     body = json::parse(res->body);
     ASSERT_EQ(body["tasks"].size(), 1);
-    EXPECT_EQ(body["tasks"][0]["task_id"], task_id1);
+    EXPECT_EQ(TaskIdToString(body["tasks"][0]["task_id"]), task_id1);
 
     res = client->Get("/api/v1/tasks?agent_id=" + agent_id + "&state=running");
     ASSERT_TRUE(res);
@@ -1150,9 +1135,7 @@ TEST_F(MasterIntegrationTest, TaskStatusTransitionValidation) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_transition");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(), "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json status = {{"state", "succeeded"}, {"exit_code", 0}};
     auto res = client->Post("/api/v1/tasks/" + task_id + "/status",
@@ -1165,7 +1148,7 @@ TEST_F(MasterIntegrationTest, TaskStatusUnknownTask) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_missing");
+    std::string task_id = "999999999";
     json status = {{"state", "running"}};
     auto res = client->Post("/api/v1/tasks/" + task_id + "/status",
                             status.dump(), "application/json");
@@ -1176,10 +1159,7 @@ TEST_F(MasterIntegrationTest, TaskStatusIdempotentQueued) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_queued");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json status = {{"state", "queued"}};
     auto res = client->Post("/api/v1/tasks/" + task_id + "/status",
@@ -1192,10 +1172,7 @@ TEST_F(MasterIntegrationTest, TaskStatusUpdatesTimestampsAndError) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_failed");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json running = {{"state", "running"}, {"started_at", "2025-01-04T09:00:00Z"}};
     ExpectStatus(client->Post("/api/v1/tasks/" + task_id + "/status",
@@ -1234,22 +1211,16 @@ TEST_F(MasterIntegrationTest, PollAssignsAndCompletesTasks) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id1 = MakeId("task_poll");
-    std::string task_id2 = MakeId("task_poll");
     json task_payload1 = {
-        {"task_id", task_id1},
         {"command", "echo"},
         {"constraints", {{"os", "linux"}}},
     };
     json task_payload2 = {
-        {"task_id", task_id2},
         {"command", "echo"},
         {"constraints", {{"os", "linux"}}},
     };
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload1.dump(),
-                              "application/json"), 201);
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload2.dump(),
-                              "application/json"), 201);
+    (void)SubmitTask(client.get(), task_payload1);
+    (void)SubmitTask(client.get(), task_payload2);
 
     json poll = {{"free_slots", 1}};
     auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1258,7 +1229,7 @@ TEST_F(MasterIntegrationTest, PollAssignsAndCompletesTasks) {
     ASSERT_EQ(res->status, 200);
     auto body = json::parse(res->body);
     ASSERT_EQ(body["tasks"].size(), 1);
-    std::string assigned_task = body["tasks"][0]["task_id"];
+    std::string assigned_task = TaskIdToString(body["tasks"][0]["task_id"]);
 
     EXPECT_EQ(state.db->GetTaskStateLower(assigned_task), "running");
     EXPECT_EQ(state.db->GetTaskAssignedAgent(assigned_task).value_or(""), agent_id);
@@ -1281,7 +1252,7 @@ TEST_F(MasterIntegrationTest, PollAssignsAndCompletesTasks) {
     ASSERT_TRUE(res);
     body = json::parse(res->body);
     ASSERT_EQ(body["tasks"].size(), 1);
-    EXPECT_NE(body["tasks"][0]["task_id"], assigned_task);
+    EXPECT_NE(TaskIdToString(body["tasks"][0]["task_id"]), assigned_task);
 }
 
 TEST_F(MasterIntegrationTest, PollTasksRespectsConstraints) {
@@ -1297,30 +1268,21 @@ TEST_F(MasterIntegrationTest, PollTasksRespectsConstraints) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_os = MakeId("task_os");
-    std::string task_cpu = MakeId("task_cpu");
-    std::string task_ram = MakeId("task_ram");
     json payload_os = {
-        {"task_id", task_os},
         {"command", "echo"},
         {"constraints", {{"os", "windows"}}},
     };
     json payload_cpu = {
-        {"task_id", task_cpu},
         {"command", "echo"},
         {"constraints", {{"cpu_cores", 4}}},
     };
     json payload_ram = {
-        {"task_id", task_ram},
         {"command", "echo"},
         {"constraints", {{"ram_mb", 2048}}},
     };
-    ExpectStatus(client->Post("/api/v1/tasks", payload_os.dump(),
-                              "application/json"), 201);
-    ExpectStatus(client->Post("/api/v1/tasks", payload_cpu.dump(),
-                              "application/json"), 201);
-    ExpectStatus(client->Post("/api/v1/tasks", payload_ram.dump(),
-                              "application/json"), 201);
+    std::string task_os = SubmitTask(client.get(), payload_os);
+    std::string task_cpu = SubmitTask(client.get(), payload_cpu);
+    std::string task_ram = SubmitTask(client.get(), payload_ram);
 
     json poll = {{"free_slots", 3}};
     auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1351,19 +1313,9 @@ TEST_F(MasterIntegrationTest, PollTasksHonorsFreeSlotLimit) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task1 = MakeId("task_slots");
-    std::string task2 = MakeId("task_slots");
-    std::string task3 = MakeId("task_slots");
-    json payload = {{"command", "echo"}};
-    payload["task_id"] = task1;
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
-    payload["task_id"] = task2;
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
-    payload["task_id"] = task3;
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task1 = SubmitTask(client.get(), json{{"command", "echo"}});
+    std::string task2 = SubmitTask(client.get(), json{{"command", "echo"}});
+    std::string task3 = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 2}};
     auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1398,15 +1350,9 @@ TEST_F(MasterIntegrationTest, PollTasksFifoOrder) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_first = MakeId("task_fifo");
-    json payload = {{"task_id", task_first}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_first = SubmitTask(client.get(), json{{"command", "echo"}});
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    std::string task_second = MakeId("task_fifo");
-    payload["task_id"] = task_second;
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_second = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 1}};
     auto res = client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1415,7 +1361,7 @@ TEST_F(MasterIntegrationTest, PollTasksFifoOrder) {
     ASSERT_EQ(res->status, 200);
     auto body = json::parse(res->body);
     ASSERT_EQ(body["tasks"].size(), 1);
-    EXPECT_EQ(body["tasks"][0]["task_id"], task_first);
+    EXPECT_EQ(TaskIdToString(body["tasks"][0]["task_id"]), task_first);
 }
 
 TEST_F(MasterIntegrationTest, PollTasksNoDoubleAssignment) {
@@ -1434,10 +1380,7 @@ TEST_F(MasterIntegrationTest, PollTasksNoDoubleAssignment) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent2, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id = MakeId("task_dual");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     auto poll_fn = [&](const std::string& agent_id) {
         auto thread_client = MakeClient(state.config);
@@ -1448,7 +1391,7 @@ TEST_F(MasterIntegrationTest, PollTasksNoDoubleAssignment) {
         if (res && res->status == 200) {
             auto body = json::parse(res->body);
             for (const auto& item : body["tasks"]) {
-                tasks.push_back(item["task_id"].get<std::string>());
+                tasks.push_back(TaskIdToString(item["task_id"]));
             }
         }
         return tasks;
@@ -1497,9 +1440,7 @@ TEST_F(MasterIntegrationTest, CancelTask) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_cancel");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(), "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     auto res = client->Post("/api/v1/tasks/" + task_id + "/cancel", "", "application/json");
     ASSERT_TRUE(res);
@@ -1515,9 +1456,7 @@ TEST_F(MasterIntegrationTest, CancelTask) {
     };
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
-    std::string task_id2 = MakeId("task_cancel");
-    json payload2 = {{"task_id", task_id2}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload2.dump(), "application/json"), 201);
+    std::string task_id2 = SubmitTask(client.get(), json{{"command", "echo"}});
     json poll = {{"free_slots", 1}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
                               poll.dump(), "application/json"), 200);
@@ -1542,10 +1481,7 @@ TEST_F(MasterIntegrationTest, CancelRunningTaskReleasesAssignment) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id = MakeId("task_cancel_run");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 1}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1566,7 +1502,7 @@ TEST_F(MasterIntegrationTest, CancelTaskUnknown) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_missing_cancel");
+    std::string task_id = "999999999";
     auto res = client->Post("/api/v1/tasks/" + task_id + "/cancel", "",
                             "application/json");
     ExpectErrorCode(res, 404, "TASK_NOT_FOUND");
@@ -1576,9 +1512,7 @@ TEST_F(MasterIntegrationTest, LogsEndpoints) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_logs");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(), "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     std::filesystem::path task_dir =
         std::filesystem::path(state.config.log_dir) / task_id;
@@ -1628,7 +1562,7 @@ TEST_F(MasterIntegrationTest, LogsNotFound) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_logs_missing");
+    std::string task_id = "999999999";
     auto res = client->Get("/api/v1/tasks/" + task_id + "/logs?stream=stdout");
     ExpectErrorCode(res, 404, "LOG_NOT_FOUND");
 }
@@ -1637,10 +1571,7 @@ TEST_F(MasterIntegrationTest, LogsTailBeyondSize) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_tail");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     std::filesystem::path task_dir =
         std::filesystem::path(state.config.log_dir) / task_id;
@@ -1663,10 +1594,7 @@ TEST_F(MasterIntegrationTest, LogsTailInvalidFrom) {
     auto& state = GetState();
     auto client = MakeClient(state.config);
 
-    std::string task_id = MakeId("task_tail_invalid");
-    json payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     std::filesystem::path task_dir =
         std::filesystem::path(state.config.log_dir) / task_id;
@@ -1709,10 +1637,7 @@ TEST_F(MasterIntegrationTest, MaintenanceKeepsFreshAgent) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id = MakeId("task_active");
-    json task_payload = {{"task_id", task_id}, {"command", "echo"}};
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
-                              "application/json"), 201);
+    std::string task_id = SubmitTask(client.get(), json{{"command", "echo"}});
 
     json poll = {{"free_slots", 1}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
@@ -1740,18 +1665,12 @@ TEST_F(MasterIntegrationTest, MaintenanceRequeuesOfflineAgent) {
     ExpectStatus(client->Put("/api/v1/agents/" + agent_id, agent_payload.dump(),
                              "application/json"), 200);
 
-    std::string task_id1 = MakeId("task_offline");
-    std::string task_id2 = MakeId("task_offline");
     json task_payload = {
         {"command", "echo"},
         {"constraints", {{"os", "linux"}}},
     };
-    task_payload["task_id"] = task_id1;
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
-                              "application/json"), 201);
-    task_payload["task_id"] = task_id2;
-    ExpectStatus(client->Post("/api/v1/tasks", task_payload.dump(),
-                              "application/json"), 201);
+    std::string task_id1 = SubmitTask(client.get(), task_payload);
+    std::string task_id2 = SubmitTask(client.get(), task_payload);
 
     json poll = {{"free_slots", 2}};
     ExpectStatus(client->Post("/api/v1/agents/" + agent_id + "/tasks:poll",
