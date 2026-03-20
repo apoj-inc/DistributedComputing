@@ -3,6 +3,16 @@ param(
     [string]$SharePassword = ""
 )
 
+function Log-Info {
+    param([string]$Message)
+    [Console]::Out.WriteLine($Message)
+}
+
+function Log-ErrorMessage {
+    param([string]$Message)
+    [Console]::Error.WriteLine($Message)
+}
+
 if (-not $ShareUser) {
     $ShareUser = $env:HDLNOCGEN_SHARE_USER
 }
@@ -17,38 +27,52 @@ $destinationDir = "C:\HDLNoCGEN"
 $destinationPath = Join-Path $destinationDir "dc_worker.exe"
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 $shareConnectedByScript = $false
 
+Log-Info "Starting copy of $sourcePath to $destinationPath"
+
 if (-not (Test-Path -Path $destinationDir)) {
+    Log-Info "Creating destination directory $destinationDir"
     New-Item -Path $destinationDir -ItemType Directory -Force | Out-Null
 }
 
 try {
     if ($ShareUser -and $SharePassword) {
-        cmd.exe /c "net use $shareRoot /user:$ShareUser $SharePassword" | Out-Null
+        Log-Info "Authenticating to $shareRoot as $ShareUser"
+        $netUseOutput = cmd.exe /c "net use $shareRoot /user:$ShareUser $SharePassword" 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to authenticate to $shareRoot via net use."
+            throw "net use failed: $($netUseOutput -join ' ')"
         }
         $shareConnectedByScript = $true
     }
+    else {
+        Log-Info "No share credentials provided; using current Windows session credentials"
+    }
 
     Copy-Item -Path $sourcePath -Destination $destinationPath -Force
-    Write-Host "Copied dc_worker.exe to $destinationPath"
+
+    if (-not (Test-Path -Path $destinationPath)) {
+        throw "Copy finished without creating destination file $destinationPath"
+    }
+
+    Log-Info "Copied dc_worker.exe to $destinationPath"
 }
 catch [System.UnauthorizedAccessException] {
-    Write-Error "Access denied to source path: $sourcePath"
+    Log-ErrorMessage "Access denied to source path: $sourcePath"
     exit 1
 }
 catch [System.Management.Automation.ItemNotFoundException] {
-    Write-Error "Source file not found: $sourcePath"
+    Log-ErrorMessage "Source file not found: $sourcePath"
     exit 1
 }
 catch {
-    Write-Error "Failed to copy $sourcePath to $destinationPath: $($_.Exception.Message)"
+    Log-ErrorMessage "Failed to copy $sourcePath to $destinationPath: $($_.Exception.Message)"
     exit 1
 }
 finally {
     if ($shareConnectedByScript) {
-        cmd.exe /c "net use $shareRoot /delete /y" | Out-Null
+        Log-Info "Disconnecting $shareRoot"
+        cmd.exe /c "net use $shareRoot /delete /y" > $null 2>&1
     }
 }
