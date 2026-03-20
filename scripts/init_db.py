@@ -266,7 +266,62 @@ def column_exists(conn, table, column):
         return cur.fetchone() is not None
 
 
-def migrate_task_constraints(conn):
+def constraint_exists(conn, table, constraint_name):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.table_constraints
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND constraint_name = %s
+            """,
+            (table, constraint_name),
+        )
+        return cur.fetchone() is not None
+
+
+def index_exists(conn, index_name):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'i'
+              AND c.relname = %s
+            """,
+            (index_name,),
+        )
+        return cur.fetchone() is not None
+
+
+def ensure_column(conn, table, column, ddl):
+    if column_exists(conn, table, column):
+        return False
+    with conn.cursor() as cur:
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    return True
+
+
+def ensure_fk(conn, table, constraint_name, ddl):
+    if constraint_exists(conn, table, constraint_name):
+        return False
+    with conn.cursor() as cur:
+        cur.execute(f"ALTER TABLE {table} ADD CONSTRAINT {constraint_name} {ddl}")
+    return True
+
+
+def ensure_index(conn, ddl, index_name):
+    if index_exists(conn, index_name):
+        return False
+    with conn.cursor() as cur:
+        cur.execute(ddl)
+    return True
+
+
+def migrate_schema(conn):
     changed = False
     if table_exists(conn, "tasks") and not column_exists(conn, "tasks", "constraints"):
         with conn.cursor() as cur:
@@ -291,14 +346,98 @@ def migrate_task_constraints(conn):
                     WHERE t.task_id = c.task_id
                     """
                 )
-            changed = True
+        changed = True
+
+    if table_exists(conn, "agents"):
+        changed = ensure_column(conn, "agents", "resources_slots", "INT NOT NULL DEFAULT 1") or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)",
+            "idx_agents_status",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_agents_last_heartbeat ON agents(last_heartbeat)",
+            "idx_agents_last_heartbeat",
+        ) or changed
 
     if table_exists(conn, "tasks") and column_exists(conn, "tasks", "constraints"):
+        changed = ensure_column(conn, "tasks", "assigned_agent", "TEXT") or changed
+        changed = ensure_fk(
+            conn,
+            "tasks",
+            "tasks_assigned_agent_fk",
+            "FOREIGN KEY (assigned_agent) REFERENCES agents(agent_id)",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_tasks_state_created_at ON tasks(state, created_at)",
+            "idx_tasks_state_created_at",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_tasks_assigned_agent ON tasks(assigned_agent)",
+            "idx_tasks_assigned_agent",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)",
+            "idx_tasks_created_at",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_tasks_constraints ON tasks USING GIN (constraints)",
+            "idx_tasks_constraints",
+        ) or changed
+
+    if not table_exists(conn, "task_assignments"):
         with conn.cursor() as cur:
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_tasks_constraints ON tasks USING GIN (constraints)"
+                """
+                CREATE TABLE task_assignments (
+                    id BIGSERIAL PRIMARY KEY,
+                    task_id BIGINT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    assigned_at TIMESTAMPTZ NOT NULL,
+                    unassigned_at TIMESTAMPTZ,
+                    reason TEXT,
+                    CONSTRAINT task_assignments_task_id_fk FOREIGN KEY (task_id)
+                        REFERENCES tasks(task_id) ON DELETE CASCADE,
+                    CONSTRAINT task_assignments_agent_id_fk FOREIGN KEY (agent_id)
+                        REFERENCES agents(agent_id) ON DELETE CASCADE
+                )
+                """
             )
         changed = True
+    else:
+        changed = ensure_column(conn, "task_assignments", "unassigned_at", "TIMESTAMPTZ") or changed
+        changed = ensure_column(conn, "task_assignments", "reason", "TEXT") or changed
+        changed = ensure_fk(
+            conn,
+            "task_assignments",
+            "task_assignments_task_id_fk",
+            "FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE",
+        ) or changed
+        changed = ensure_fk(
+            conn,
+            "task_assignments",
+            "task_assignments_agent_id_fk",
+            "FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE",
+        ) or changed
+
+    if table_exists(conn, "task_assignments"):
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_task_assignments_task_id_assigned_at "
+            "ON task_assignments(task_id, assigned_at)",
+            "idx_task_assignments_task_id_assigned_at",
+        ) or changed
+        changed = ensure_index(
+            conn,
+            "CREATE INDEX IF NOT EXISTS idx_task_assignments_agent_id_assigned_at "
+            "ON task_assignments(agent_id, assigned_at)",
+            "idx_task_assignments_agent_id_assigned_at",
+        ) or changed
 
     if changed:
         conn.commit()
@@ -554,7 +693,8 @@ def main():
 
     target_conn = connect_db(params, params["dbname"])
     try:
-        migrate_task_constraints(target_conn)
+        create_schema(target_conn)
+        migrate_schema(target_conn)
         diffs = compare_schema(target_conn)
         if diffs:
             print("Найдены различия схемы:")

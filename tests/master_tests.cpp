@@ -166,16 +166,28 @@ TEST(ApiMappersTest, ParseTaskCreateReadsOptionalFields) {
     std::string error;
     nlohmann::json payload{
         {"command", "run"},
-        {"args", nlohmann::json::array({1, 2})},
+        {"args", nlohmann::json::array({"one", "two"})},
         {"env", nlohmann::json{{"KEY", "VALUE"}}},
         {"timeout_sec", 30},
         {"constraints", nlohmann::json{{"os", "linux"}}},
     };
     EXPECT_TRUE(dc::master::api::ParseTaskCreate(payload, &out, &error));
     EXPECT_EQ(out.args.size(), 2);
+    EXPECT_EQ(out.args[0], "one");
     EXPECT_EQ(out.env["KEY"], "VALUE");
     EXPECT_EQ(out.timeout_sec.value(), 30);
     EXPECT_EQ(out.constraints["os"], "linux");
+}
+
+TEST(ApiMappersTest, ParseTaskCreateFiltersNonStringArgs) {
+    dc::master::TaskInput out;
+    std::string error;
+    nlohmann::json payload{
+        {"command", "run"},
+        {"args", nlohmann::json::array({"keep", 2, true, "also-keep"})},
+    };
+    EXPECT_TRUE(dc::master::api::ParseTaskCreate(payload, &out, &error));
+    EXPECT_EQ(out.args, nlohmann::json::array({"keep", "also-keep"}));
 }
 
 TEST(ApiMappersTest, ParseTaskStatusUpdateValidatesState) {

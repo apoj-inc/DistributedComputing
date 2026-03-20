@@ -23,6 +23,19 @@ std::optional<std::string> OptionalNonEmptyStringField(const nlohmann::json& bod
     return value;
 }
 
+nlohmann::json SanitizeStringArray(const nlohmann::json& value) {
+    nlohmann::json sanitized = nlohmann::json::array();
+    if (!value.is_array()) {
+        return sanitized;
+    }
+    for (const auto& item : value) {
+        if (item.is_string()) {
+            sanitized.push_back(item);
+        }
+    }
+    return sanitized;
+}
+
 }  // namespace
 
 bool ParseAgentInput(const std::string& agent_id,
@@ -108,8 +121,8 @@ bool ParseTaskCreate(const nlohmann::json& body, TaskInput* out, std::string* er
     }
 
     out->command = body["command"].get<std::string>();
-    out->args = (body.contains("args") && body["args"].is_array()) ? body["args"]
-                                                                   : nlohmann::json::array();
+    out->args = body.contains("args") ? SanitizeStringArray(body["args"])
+                                      : nlohmann::json::array();
     out->env = (body.contains("env") && body["env"].is_object()) ? body["env"]
                                                                  : nlohmann::json::object();
     if (body.contains("timeout_sec") && body["timeout_sec"].is_number_integer()) {

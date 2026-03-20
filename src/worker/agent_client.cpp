@@ -145,7 +145,9 @@ bool AgentClient::PollTasks(const std::string& agent_id,
             dispatch.command = item["command"].get<std::string>();
             if (item.contains("args") && item["args"].is_array()) {
                 for (const auto& arg : item["args"]) {
-                    dispatch.args.push_back(arg.get<std::string>());
+                    if (arg.is_string()) {
+                        dispatch.args.push_back(arg.get<std::string>());
+                    }
                 }
             }
             if (item.contains("env") && item["env"].is_object()) {

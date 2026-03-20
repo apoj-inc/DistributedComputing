@@ -996,6 +996,26 @@ TEST_F(MasterIntegrationTest, SubmitTaskInvalidTypesIgnored) {
     EXPECT_FALSE(body["task"].contains("timeout_sec"));
 }
 
+TEST_F(MasterIntegrationTest, SubmitTaskFiltersNonStringArgs) {
+    auto& state = GetState();
+    auto client = MakeClient(state.config);
+
+    json payload = {
+        {"command", "echo"},
+        {"args", json::array({"hello", 123, false, "world"})},
+    };
+    auto res = client->Post("/api/v1/tasks", payload.dump(), "application/json");
+    ExpectStatus(res, 201);
+    std::string task_id = TaskIdToString(json::parse(res->body)["task_id"]);
+
+    res = client->Get("/api/v1/tasks/" + task_id);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    auto body = json::parse(res->body);
+    ASSERT_TRUE(body.contains("task"));
+    EXPECT_EQ(body["task"]["args"], json::array({"hello", "world"}));
+}
+
 TEST_F(MasterIntegrationTest, SubmitTaskLabelsSaved) {
     auto& state = GetState();
     auto client = MakeClient(state.config);

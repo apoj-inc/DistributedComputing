@@ -64,6 +64,25 @@ cmake -S . -B build
 cmake --build build
 ```
 
+### One command: native + arm + win_worker
+Build matrix into a dedicated folder (`build/full`) with one command:
+```
+./scripts/build_full_matrix.sh
+```
+
+Artifacts:
+- native binaries (+ `win_worker` cross-build): `build/full/native`
+- ARM binaries (`master + worker + cli`): `build/full/arm`
+
+Requirements for matrix build:
+- MinGW-w64 cross compiler (`x86_64-w64-mingw32-g++-posix` or `x86_64-w64-mingw32-g++`) for `win_worker`
+- ARM64 cross compiler (`aarch64-linux-gnu-g++`) for ARM build
+- ARM-target `libpqxx`/`libpq` must be available for ARM `master`
+
+Notes:
+- Matrix build is for binaries only (`DC_BUILD_TESTS=OFF`).
+- You can override ARM compiler prefix: `DC_ARM_CROSS_PREFIX=<prefix> ./scripts/build_full_matrix.sh`
+
 ## Tests
 Integration tests for Master run via CTest and start a temporary Master instance.
 They require a reachable PostgreSQL database and Python with `psycopg2-binary`.
