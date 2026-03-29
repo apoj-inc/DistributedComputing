@@ -35,25 +35,37 @@
       "name": "full-native-release",
       "displayName": "Full Matrix Native Release",
       "inherits": "base",
-      "binaryDir": "${sourceDir}/build/full/native",
+      "binaryDir": "${sourceDir}/build/native",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "DC_BUILD_TESTS": "OFF",
-        "DC_BUILD_WIN_WORKER": "ON"
+        "DC_BUILD_WIN_WORKER": "OFF"
       }
     },
     {
-      "name": "full-arm-release",
+      "name": "x86_64-linux",
+      "displayName": "Linux x86_64",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/x86_64-linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/x86_64-linux-gnu.cmake",
+        "DC_ONLY_WORKER": "OFF",
+        "DC_BUILD_MASTER": "ON",
+        "DC_BUILD_CLI": "ON",
+        "DC_BUILD_WIN_WORKER": "OFF"
+      }
+    },
+    {
+      "name": "arm-linux",
       "displayName": "Full Matrix ARM Release",
       "inherits": "base",
-      "binaryDir": "${sourceDir}/build/full/arm",
+      "binaryDir": "${sourceDir}/build/arm-linux",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/arm64-linux-gnu.cmake",
         "DC_ONLY_WORKER": "OFF",
         "DC_BUILD_MASTER": "ON",
         "DC_BUILD_CLI": "ON",
-        "DC_BUILD_TESTS": "OFF",
         "DC_BUILD_WIN_WORKER": "OFF"
       }
     }
@@ -72,17 +84,12 @@
       "configurePreset": "full-native-release"
     },
     {
-      "name": "full-arm-release",
-      "configurePreset": "full-arm-release"
-    }
-  ],
-  "testPresets": [
+      "name": "x86_64-linux",
+      "configurePreset": "x86_64-linux"
+    },
     {
-      "name": "debug",
-      "configurePreset": "debug",
-      "output": {
-        "outputOnFailure": true
-      }
+      "name": "arm-linux",
+      "configurePreset": "arm-linux"
     }
   ]
 }

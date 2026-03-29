@@ -56,7 +56,7 @@ int BindEphemeral(int preferred, std::string* error) {
 #if defined(_WIN32)
     int len;
 #else
-    socken_t len;
+    socklen_t len;
 #endif
     len = sizeof(addr);
     if (getsockname(sock, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {

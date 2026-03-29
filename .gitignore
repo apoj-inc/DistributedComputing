@@ -1,5 +1,7 @@
 /build/
 /.vscode/
+_deps
+CMakeFiles
 *.o
 *.obj
 *.exe
