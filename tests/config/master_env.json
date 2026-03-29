@@ -1,0 +1,13 @@
+{
+    "DB_HOST": "127.0.0.1",
+    "DB_PORT": 5432,
+    "DB_USER": "POSTGRES",
+    "DB_PASSWORD": "IAMTHEPASSWORD",
+    "DB_NAME": "EVENTBASEDDB",
+    "DB_SSLMODE": false,
+    "MASTER_HOST": "127.0.0.1",
+    "MASTER_PORT": 1789,
+    "LOG_DIR": "Testing/log",
+    "HEARTBEAT_SEC": 30,
+    "OFFLINE_SEC": 30
+}
