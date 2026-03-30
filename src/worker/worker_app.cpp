@@ -1,4 +1,4 @@
-#include "worker_app.h"
+#include "worker_app.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -11,9 +11,9 @@
 
 #include <spdlog/spdlog.h>
 
-#include "common/env.h"
-#include "common/logging.h"
-#include "common/time_utils.h"
+#include "common/env.hpp"
+#include "common/logging.hpp"
+#include "common/time_utils.hpp"
 
 namespace dc {
 namespace worker {
@@ -227,7 +227,7 @@ void WorkerApp::TickOnce() {
 
         if (task.constraints.contains("os") && task.constraints["os"].is_string()) {
             if (task.constraints["os"].get<std::string>() != config_.os) {
-                std::string msg = "OS constraint mismatch";
+                std::string msg = "OS constraint mismatchpp";
                 client_->UpdateTaskStatus(task.task_id, "failed", 1, std::nullopt,
                                           dc::common::NowUtcIso8601(), msg, &error);
                 continue;

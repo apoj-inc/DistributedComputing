@@ -1,9 +1,9 @@
-#include "api_mappers.h"
+#include "api_mappers.hpp"
 
 #include <cctype>
 #include <limits>
 
-#include "status.h"
+#include "status.hpp"
 
 namespace dc {
 namespace master {

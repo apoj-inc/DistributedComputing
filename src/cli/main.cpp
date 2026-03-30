@@ -11,9 +11,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "api_client.h"
-#include "common/env.h"
-#include "formatters.h"
+#include "api_client.hpp"
+#include "common/env.hpp"
+#include "formatters.hpp"
 
 namespace dc {
 namespace cli {
@@ -163,7 +163,7 @@ bool ParseGlobalOptions(const std::vector<std::string>& args,
 
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& arg = args[i];
-        if (arg == "-h" || arg == "--help") {
+        if (arg == "-hpp" || arg == "--help") {
             out->help = true;
             continue;
         }

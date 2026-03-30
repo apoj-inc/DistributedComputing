@@ -1,11 +1,11 @@
-#include "storage.h"
+#include "storage.hpp"
 
 #include <sstream>
 
 #include <pqxx/pqxx>
 
-#include "common/logging.h"
-#include "status.h"
+#include "common/logging.hpp"
+#include "status.hpp"
 
 namespace dc {
 namespace master {

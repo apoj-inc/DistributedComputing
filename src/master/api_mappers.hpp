@@ -6,7 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "storage.h"
+#include "storage.hpp"
 
 namespace dc {
 namespace master {

@@ -5,8 +5,8 @@
 #include <string>
 #include <thread>
 
-#include "log_store.h"
-#include "storage.h"
+#include "log_store.hpp"
+#include "storage.hpp"
 
 namespace httplib {
 class Request;

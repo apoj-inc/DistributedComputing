@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-#include "common/string_utils.h"
+#include "common/string_utils.hpp"
 
 namespace dc {
 namespace master {

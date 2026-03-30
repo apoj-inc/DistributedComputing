@@ -1,4 +1,4 @@
-#include "control_service.h"
+#include "control_service.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -8,8 +8,8 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
-#include "common/logging.h"
-#include "api_mappers.h"
+#include "common/logging.hpp"
+#include "api_mappers.hpp"
 namespace dc {
 namespace master {
 

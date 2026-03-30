@@ -10,9 +10,9 @@
 #include <sys/wait.h>
 #endif
 
-#include "common/env.h"
-#include "common/logging.h"
-#include "control_service.h"
+#include "common/env.hpp"
+#include "common/logging.hpp"
+#include "control_service.hpp"
 
 namespace {
 
@@ -101,7 +101,7 @@ bool ParseArgs(int argc, char* argv[], MasterArgs* args, std::string* error) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
-        if (arg == "--help" || arg == "-h") {
+        if (arg == "--help" || arg == "-hpp") {
             PrintUsage();
             return false;
         } else if (arg == "--env-file" || arg == "-e") {

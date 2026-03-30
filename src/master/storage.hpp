@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "status.h"
+#include "status.hpp"
 
 namespace dc {
 namespace master {
