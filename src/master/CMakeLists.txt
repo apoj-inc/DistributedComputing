@@ -18,8 +18,17 @@ add_executable(${PROJECT_NAME} ${PROJECT_SRC})
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_INC})
 
 find_package(Threads REQUIRED)
+find_package(PostgreSQL REQUIRED)
+
+FetchContent_Declare(
+    libpqxx
+    GIT_REPOSITORY https://github.com/jtv/libpqxx.git
+    GIT_TAG fd7758fcdbf1bc7278d85d525de061acfb412d94
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(libpqxx)
 
 list(APPEND PROJECT_LIB Threads::Threads)
-list(APPEND PROJECT_LIB ${LIBPQXX_LIBRARIES})
+list(APPEND PROJECT_LIB libpqxx::pqxx)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_LIB})

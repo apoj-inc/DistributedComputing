@@ -24,7 +24,7 @@ FROM ubuntu:22.04 AS cli
 
 ENV MAIN=/home/main
 
-COPY build/x86_64-linux/src/master/dc_cli cli
+COPY build/x86_64-linux/src/cli/dc_cli cli
 RUN chmod +x cli
 
 WORKDIR $MAIN

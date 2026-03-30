@@ -14,17 +14,9 @@ C++ distributed computing system with Master, Worker, and CLI components.
 - tests/ - unit/integration/e2e tests
 
 ## Dependencies
-- CMake 3.20+ and a C++17 compiler
+- CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
-- libpqxx (system dependency, required for Master)
 - Python 3 with `psycopg2-binary` for `scripts/init_db.py`
-
-### libpqxx install
-- Linux (Debian/Ubuntu):
-  - `sudo apt-get install libpqxx-dev libpq-dev`
-- Windows (vcpkg):
-  - `vcpkg install libpqxx:x64-windows`
-  - then pass toolchain file to CMake: `-DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake`
 
 ## Header-only dependencies (third_party)
 Place the header-only libraries into `third_party/`:
