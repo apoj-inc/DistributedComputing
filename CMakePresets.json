@@ -47,10 +47,7 @@
       "binaryDir": "${sourceDir}/build/x86_64-linux",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/x86_64-linux-gnu.cmake",
-        "DC_ONLY_WORKER": "OFF",
-        "DC_BUILD_MASTER": "ON",
-        "DC_BUILD_CLI": "ON"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/x86_64-linux-gnu.cmake"
       }
     },
     {
@@ -60,10 +57,7 @@
       "binaryDir": "${sourceDir}/build/x86_64-windows",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/mingw64.cmake",
-        "DC_ONLY_WORKER": "OFF",
-        "DC_BUILD_MASTER": "ON",
-        "DC_BUILD_CLI": "ON"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/mingw64.cmake"
       }
     },
     {
@@ -73,10 +67,7 @@
       "binaryDir": "${sourceDir}/build/arm-linux",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/arm64-linux-gnu.cmake",
-        "DC_ONLY_WORKER": "OFF",
-        "DC_BUILD_MASTER": "ON",
-        "DC_BUILD_CLI": "ON"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/arm64-linux-gnu.cmake"
       }
     }
   ],
