@@ -13,6 +13,7 @@
 #include "common/env.hpp"
 #include "common/logging.hpp"
 #include "control_service.hpp"
+#include "pg_storage.hpp"
 
 namespace {
 
@@ -252,8 +253,7 @@ int main(int argc, char* argv[]) {
         return init_code;
     }
 
-    Storage storage(db);
     LogStore log_store(config.log_dir);
-    ControlService service(config, storage, log_store);
+    ControlService service(std::move(config), new PgStorage(db), std::move(log_store));
     return service.Run();
 }

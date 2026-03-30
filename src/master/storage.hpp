@@ -91,44 +91,56 @@ enum class CancelTaskResult {
     Error,
 };
 
+enum class StorageType {
+    PGSQL,
+    MONGO,
+};
+
 class Storage {
 public:
-    explicit Storage(DbConfig config);
+    explicit Storage(DbConfig& config, StorageType storageType): config_(config), storage_type_(storageType){};
 
-    bool UpsertAgent(const AgentInput& agent);
-    bool UpdateHeartbeat(const AgentHeartbeat& heartbeat);
+    virtual ~Storage() = default;
 
-    std::optional<AgentRecord> GetAgent(const std::string& agent_id);
-    std::vector<AgentRecord> ListAgents(const std::optional<AgentStatus>& status,
+    virtual bool UpsertAgent(const AgentInput& agent) = 0;
+    virtual bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) = 0;
+
+    virtual std::optional<AgentRecord> GetAgent(const std::string& agent_id) = 0;
+    virtual std::vector<AgentRecord> ListAgents(const std::optional<AgentStatus>& status,
                                         int limit,
-                                        int offset);
+                                        int offset) = 0;
 
-    std::int64_t CreateTask(const TaskInput& task);
-    std::optional<TaskRecord> GetTask(std::int64_t task_id);
-    std::vector<TaskSummary> ListTasks(const std::optional<TaskState>& state,
+    virtual std::int64_t CreateTask(const TaskInput& task) = 0;
+    virtual std::optional<TaskRecord> GetTask(std::int64_t task_id) = 0;
+    virtual std::vector<TaskSummary> ListTasks(const std::optional<TaskState>& state,
                                        const std::optional<std::string>& agent_id,
                                        int limit,
-                                       int offset);
+                                       int offset) = 0;
 
     // Returns std::nullopt when agent does not exist.
-    std::optional<std::vector<TaskDispatch>> PollTasksForAgent(const std::string& agent_id,
-                                                               int free_slots);
+    virtual std::optional<std::vector<TaskDispatch>> PollTasksForAgent(const std::string& agent_id,
+                                                               int free_slots) = 0;
 
-    bool UpdateTaskStatus(std::int64_t task_id,
+    virtual bool UpdateTaskStatus(std::int64_t task_id,
                           TaskState state,
                           const std::optional<int>& exit_code,
                           const std::optional<std::string>& started_at,
                           const std::optional<std::string>& finished_at,
-                          const std::optional<std::string>& error_message);
+                          const std::optional<std::string>& error_message) = 0;
 
-    CancelTaskResult CancelTask(std::int64_t task_id);
+    virtual CancelTaskResult CancelTask(std::int64_t task_id) = 0;
 
     // Marks agents offline and requeues tasks assigned to them.
-    int MarkOfflineAgentsAndRequeue(int offline_after_sec);
+    virtual int MarkOfflineAgentsAndRequeue(int offline_after_sec) = 0;
 
-private:
-    std::string ConnectionString() const;
+    const StorageType GetStorageType() const {
+        return storage_type_;
+    };
 
+protected:
+    virtual std::string ConnectionString() const = 0;
+
+    const StorageType storage_type_;
     DbConfig config_;
 };
 

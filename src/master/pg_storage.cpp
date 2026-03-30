@@ -1,4 +1,4 @@
-#include "storage.hpp"
+#include "pg_storage.hpp"
 
 #include <sstream>
 
@@ -54,9 +54,9 @@ json BuildConstraintsFromRow(const pqxx::row& row) {
 
 }  // namespace
 
-Storage::Storage(DbConfig config) : config_(std::move(config)) {}
+PgStorage::PgStorage(DbConfig& config) : Storage(config, StorageType::PGSQL) {}
 
-std::string Storage::ConnectionString() const {
+std::string PgStorage::ConnectionString() const {
     std::ostringstream out;
     if (!config_.host.empty()) {
         out << "host=" << config_.host << " ";
@@ -79,7 +79,7 @@ std::string Storage::ConnectionString() const {
     return out.str();
 }
 
-bool Storage::UpsertAgent(const AgentInput& agent) {
+bool PgStorage::UpsertAgent(const AgentInput& agent) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     tx.exec_params(
@@ -104,7 +104,7 @@ bool Storage::UpsertAgent(const AgentInput& agent) {
     return true;
 }
 
-bool Storage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
+bool PgStorage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -118,7 +118,7 @@ bool Storage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     return true;
 }
 
-std::optional<AgentRecord> Storage::GetAgent(const std::string& agent_id) {
+std::optional<AgentRecord> PgStorage::GetAgent(const std::string& agent_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -144,7 +144,7 @@ std::optional<AgentRecord> Storage::GetAgent(const std::string& agent_id) {
     return record;
 }
 
-std::vector<AgentRecord> Storage::ListAgents(const std::optional<AgentStatus>& status,
+std::vector<AgentRecord> PgStorage::ListAgents(const std::optional<AgentStatus>& status,
                                              int limit,
                                              int offset) {
     pqxx::connection conn(ConnectionString());
@@ -185,7 +185,7 @@ std::vector<AgentRecord> Storage::ListAgents(const std::optional<AgentStatus>& s
     return agents;
 }
 
-std::int64_t Storage::CreateTask(const TaskInput& task) {
+std::int64_t PgStorage::CreateTask(const TaskInput& task) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 
@@ -220,7 +220,7 @@ std::int64_t Storage::CreateTask(const TaskInput& task) {
     return task_id;
 }
 
-std::optional<TaskRecord> Storage::GetTask(std::int64_t task_id) {
+std::optional<TaskRecord> PgStorage::GetTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -271,7 +271,7 @@ std::optional<TaskRecord> Storage::GetTask(std::int64_t task_id) {
     return record;
 }
 
-std::vector<TaskSummary> Storage::ListTasks(const std::optional<TaskState>& state,
+std::vector<TaskSummary> PgStorage::ListTasks(const std::optional<TaskState>& state,
                                             const std::optional<std::string>& agent_id,
                                             int limit,
                                             int offset) {
@@ -307,7 +307,7 @@ std::vector<TaskSummary> Storage::ListTasks(const std::optional<TaskState>& stat
     return tasks;
 }
 
-std::optional<std::vector<TaskDispatch>> Storage::PollTasksForAgent(
+std::optional<std::vector<TaskDispatch>> PgStorage::PollTasksForAgent(
     const std::string& agent_id,
     int free_slots) {
     pqxx::connection conn(ConnectionString());
@@ -397,7 +397,7 @@ std::optional<std::vector<TaskDispatch>> Storage::PollTasksForAgent(
     return dispatches;
 }
 
-bool Storage::UpdateTaskStatus(std::int64_t task_id,
+bool PgStorage::UpdateTaskStatus(std::int64_t task_id,
                                TaskState state,
                                const std::optional<int>& exit_code,
                                const std::optional<std::string>& started_at,
@@ -482,7 +482,7 @@ bool Storage::UpdateTaskStatus(std::int64_t task_id,
     return true;
 }
 
-CancelTaskResult Storage::CancelTask(std::int64_t task_id) {
+CancelTaskResult PgStorage::CancelTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 
@@ -517,7 +517,7 @@ CancelTaskResult Storage::CancelTask(std::int64_t task_id) {
     return CancelTaskResult::Ok;
 }
 
-int Storage::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
+int PgStorage::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 

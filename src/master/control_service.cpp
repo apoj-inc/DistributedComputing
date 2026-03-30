@@ -78,10 +78,10 @@ int GetQueryParamInt(const httplib::Request& req, const std::string& name, int f
 
 }  // namespace
 
-ControlService::ControlService(MasterConfig config, Storage storage, LogStore log_store)
-    : config_(std::move(config)),
-      storage_(std::move(storage)),
-      log_store_(std::move(log_store)) {}
+ControlService::ControlService(MasterConfig config, Storage* storage, LogStore log_store)
+    : config_(config),
+      storage_(storage),
+      log_store_(log_store) {}
 
 ControlService::~ControlService() = default;
 
@@ -171,7 +171,7 @@ void ControlService::HandleUpsertAgent(const httplib::Request& req,
     }
 
     try {
-        storage_.UpsertAgent(agent);
+        storage_->UpsertAgent(agent);
     } catch (const std::exception& ex) {
         spdlog::error("DB error upserting agent {}: {}", agent_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -202,7 +202,7 @@ void ControlService::HandleAgentHeartbeat(const httplib::Request& req,
     }
 
     try {
-        if (!storage_.UpdateHeartbeat(heartbeat)) {
+        if (!storage_->UpdateHeartbeat(heartbeat)) {
             SetJsonResponse(res, MakeError("AGENT_NOT_FOUND", "Agent not found",
                                            {{"agent_id", agent_id}}), 404);
             return;
@@ -236,7 +236,7 @@ void ControlService::HandlePollTasks(const httplib::Request& req,
 
     std::optional<std::vector<TaskDispatch>> dispatches;
     try {
-        dispatches = storage_.PollTasksForAgent(agent_id, free_slots);
+        dispatches = storage_->PollTasksForAgent(agent_id, free_slots);
     } catch (const std::exception& ex) {
         spdlog::error("DB error polling tasks for {}: {}", agent_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -275,7 +275,7 @@ void ControlService::HandleCreateTask(const httplib::Request& req,
 
     std::int64_t created_task_id = 0;
     try {
-        created_task_id = storage_.CreateTask(task);
+        created_task_id = storage_->CreateTask(task);
     } catch (const std::exception& ex) {
         spdlog::error("DB error creating task: {}", ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -298,7 +298,7 @@ void ControlService::HandleGetTask(const httplib::Request& req,
     }
     std::optional<TaskRecord> task;
     try {
-        task = storage_.GetTask(*task_id);
+        task = storage_->GetTask(*task_id);
     } catch (const std::exception& ex) {
         spdlog::error("DB error fetching task {}: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -333,7 +333,7 @@ void ControlService::HandleListTasks(const httplib::Request& req,
 
     std::vector<TaskSummary> tasks;
     try {
-        tasks = storage_.ListTasks(state, agent_id, limit, offset);
+        tasks = storage_->ListTasks(state, agent_id, limit, offset);
     } catch (const std::exception& ex) {
         spdlog::error("DB error listing tasks: {}", ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -378,7 +378,7 @@ void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
 
     std::optional<TaskRecord> current;
     try {
-        current = storage_.GetTask(*task_id);
+        current = storage_->GetTask(*task_id);
     } catch (const std::exception& ex) {
         spdlog::error("DB error fetching task {} for update: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -399,7 +399,7 @@ void ControlService::HandleUpdateTaskStatus(const httplib::Request& req,
     }
 
     try {
-        if (!storage_.UpdateTaskStatus(*task_id,
+        if (!storage_->UpdateTaskStatus(*task_id,
                                        update.state,
                                        update.exit_code,
                                        update.started_at,
@@ -432,7 +432,7 @@ void ControlService::HandleCancelTask(const httplib::Request& req,
     }
     CancelTaskResult result;
     try {
-        result = storage_.CancelTask(*task_id);
+        result = storage_->CancelTask(*task_id);
     } catch (const std::exception& ex) {
         spdlog::error("DB error canceling task {}: {}", *task_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -465,7 +465,7 @@ void ControlService::HandleGetAgent(const httplib::Request& req,
     const std::string agent_id = req.matches[1];
     std::optional<AgentRecord> agent;
     try {
-        agent = storage_.GetAgent(agent_id);
+        agent = storage_->GetAgent(agent_id);
     } catch (const std::exception& ex) {
         spdlog::error("DB error fetching agent {}: {}", agent_id, ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -498,7 +498,7 @@ void ControlService::HandleListAgents(const httplib::Request& req,
 
     std::vector<AgentRecord> agents;
     try {
-        agents = storage_.ListAgents(status, limit, offset);
+        agents = storage_->ListAgents(status, limit, offset);
     } catch (const std::exception& ex) {
         spdlog::error("DB error listing agents: {}", ex.what());
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
@@ -631,7 +631,7 @@ void ControlService::StartMaintenanceThread() {
     maintenance_thread_ = std::thread([this]() {
         while (running_.load()) {
             try {
-                int count = storage_.MarkOfflineAgentsAndRequeue(config_.offline_after_sec);
+                int count = storage_->MarkOfflineAgentsAndRequeue(config_.offline_after_sec);
                 if (count > 0) {
                     spdlog::info("Marked {} agents offline and requeued tasks", count);
                 }
