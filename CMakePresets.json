@@ -37,8 +37,7 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/build/native",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "DC_BUILD_WIN_WORKER": "OFF"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -51,8 +50,20 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/x86_64-linux-gnu.cmake",
         "DC_ONLY_WORKER": "OFF",
         "DC_BUILD_MASTER": "ON",
-        "DC_BUILD_CLI": "ON",
-        "DC_BUILD_WIN_WORKER": "OFF"
+        "DC_BUILD_CLI": "ON"
+      }
+    },
+    {
+      "name": "x86_64-windows",
+      "displayName": "Windows x86_64",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/x86_64-windows",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/mingw64.cmake",
+        "DC_ONLY_WORKER": "OFF",
+        "DC_BUILD_MASTER": "ON",
+        "DC_BUILD_CLI": "ON"
       }
     },
     {
@@ -65,8 +76,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/toolchains/arm64-linux-gnu.cmake",
         "DC_ONLY_WORKER": "OFF",
         "DC_BUILD_MASTER": "ON",
-        "DC_BUILD_CLI": "ON",
-        "DC_BUILD_WIN_WORKER": "OFF"
+        "DC_BUILD_CLI": "ON"
       }
     }
   ],
