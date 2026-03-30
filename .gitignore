@@ -1,6 +1,9 @@
 /build/
 /.vscode/
+/.venv/
+/.pytest_cache/
 _deps
+__pycache__
 CMakeFiles
 *.o
 *.obj
