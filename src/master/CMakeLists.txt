@@ -40,7 +40,7 @@ FetchContent_MakeAvailable(libpqxx)
 
 list(APPEND PROJECT_LIB Threads::Threads)
 list(APPEND PROJECT_LIB libpqxx::pqxx)
-list(APPEND PROJECT_LIB mongocxx::mongocxx)
-list(APPEND PROJECT_LIB bsoncxx::bsoncxx)
+list(APPEND PROJECT_LIB bsoncxx_static)
+list(APPEND PROJECT_LIB mongocxx_static)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_LIB})

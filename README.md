@@ -16,7 +16,7 @@ C++ distributed computing system with Master, Worker, and CLI components.
 ## Dependencies
 - CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
-- MongoDB C++ driver (`libmongoc` + `libbson`) for master build (sudo apt install libmongoc-dev libbson-dev)
+- MongoDB C++ driver ('libbson`) for master build (sudo apt install libbson-dev)
 - Python 3 with `psycopg2-binary` for `scripts/init_db.py`
 
 ## Header-only dependencies (third_party)
