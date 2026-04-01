@@ -1,4 +1,4 @@
-#include "task_executor.h"
+#include "task_executor.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -24,7 +24,7 @@
 extern char** environ;
 #endif
 
-#include "common/time_utils.h"
+#include "common/time_utils.hpp"
 
 namespace dc {
 namespace worker {

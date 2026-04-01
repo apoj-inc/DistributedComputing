@@ -94,3 +94,15 @@ DB_NAME=distributed
 ```
 python3 scripts/init_db.py --config configs/db.env
 ```
+
+## 8. MongoDB backend
+Master also supports MongoDB storage when `DB_BACKEND=mongo`.
+
+Required variables for Mongo mode:
+- `MONGO_URI` (for example: `mongodb://127.0.0.1:27017`)
+- `MONGO_DB` (database name)
+
+Behavior notes:
+- `scripts/init_db.py` is used only for `DB_BACKEND=postgres`.
+- In Mongo mode, startup skips the Postgres init script.
+- Collections used by Master: `agents`, `tasks`, `task_assignments`, `counters`.

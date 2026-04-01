@@ -1,0 +1,28 @@
+version: '3.0'
+services:
+  postgres:
+    image: postgres:18.3-alpine3.23
+    restart: always
+    environment:
+      - POSTGRES_USER=${PGUSER}
+      - POSTGRES_PASSWORD=${PGPASSWORD}
+      - POSTGRES_DB=${PGDATABASE}
+      - POSTGRES_ADMIN_PASSWORD=${PGPASSWORD}
+    networks:
+      - backend
+  mongo-event:
+    image: mongo:8.0 
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017" # Expose MongoDB on the default port
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MGUSER}     # Set the admin username
+      MONGO_INITDB_ROOT_PASSWORD: ${MGPASSWORD} # Set the admin password
+    networks:
+      - backend
+networks:
+  backend: {}
+  frontend: {}
+
+

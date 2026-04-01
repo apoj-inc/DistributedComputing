@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 
-#include "agent_client.h"
+#include "agent_client.hpp"
 
 namespace dc {
 namespace worker {

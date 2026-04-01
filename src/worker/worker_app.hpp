@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "agent_client.h"
-#include "task_executor.h"
+#include "agent_client.hpp"
+#include "task_executor.hpp"
 
 namespace dc {
 namespace worker {

@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -10,9 +12,11 @@
 #include <sys/wait.h>
 #endif
 
-#include "common/env.h"
-#include "common/logging.h"
-#include "control_service.h"
+#include "common/env.hpp"
+#include "common/logging.hpp"
+#include "control_service.hpp"
+#include "mongo_storage.hpp"
+#include "pg_storage.hpp"
 
 namespace {
 
@@ -87,6 +91,13 @@ struct MasterArgs {
     std::optional<std::string> env_file;
 };
 
+std::string ToLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
 void PrintUsage() {
     std::cout << "Usage: dc_master [--env-file <path>]\n"
               << "Options:\n"
@@ -101,7 +112,7 @@ bool ParseArgs(int argc, char* argv[], MasterArgs* args, std::string* error) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
-        if (arg == "--help" || arg == "-h") {
+        if (arg == "--help" || arg == "-hpp") {
             PrintUsage();
             return false;
         } else if (arg == "--env-file" || arg == "-e") {
@@ -221,16 +232,31 @@ int main(int argc, char* argv[]) {
                                                                 10 * 1024 * 1024));
 
     DbConfig db;
-    db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
-    db.port = dc::common::GetEnvOrDefault("DB_PORT", "5432");
-    db.user = dc::common::GetEnvOrDefault("DB_USER", "");
-    db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
-    db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
-    db.sslmode = dc::common::GetEnvOrDefault("DB_SSLMODE", "");
-
-    if (db.user.empty() || db.dbname.empty()) {
-        spdlog::critical("Missing DB_USER or DB_NAME environment variable.");
+    const std::string backend = ToLower(dc::common::GetEnvOrDefault("DB_BACKEND", "postgres"));
+    if (backend != "postgres" && backend != "mongo") {
+        spdlog::critical("Invalid DB_BACKEND '{}'. Expected 'postgres' or 'mongo'.", backend);
         return 2;
+    }
+
+    if (backend == "postgres") {
+        db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
+        db.port = dc::common::GetEnvOrDefault("DB_PORT", "5432");
+        db.user = dc::common::GetEnvOrDefault("DB_USER", "");
+        db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
+        db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
+        db.sslmode = dc::common::GetEnvOrDefault("DB_SSLMODE", "");
+
+        if (db.user.empty() || db.dbname.empty()) {
+            spdlog::critical("Missing DB_USER or DB_NAME environment variable.");
+            return 2;
+        }
+    } else {
+        db.host = dc::common::GetEnvOrDefault("MONGO_URI", "");
+        db.dbname = dc::common::GetEnvOrDefault("MONGO_DB", "");
+        if (db.host.empty() || db.dbname.empty()) {
+            spdlog::critical("Missing MONGO_URI or MONGO_DB environment variable.");
+            return 2;
+        }
     }
 
     // Ensure log root exists even if no task logs are present yet.
@@ -241,19 +267,26 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    // Apply/init DB schema; refuse to start if init_db reports differences.
-    int init_code = RunInitDbScript();
-    if (init_code == 4) {
-        spdlog::critical("Database schema mismatch; see init_db.py output above.");
-        return init_code;
-    }
-    if (init_code != 0) {
-        spdlog::critical("Database init failed with code {}", init_code);
-        return init_code;
+    if (backend == "postgres") {
+        // Apply/init DB schema; refuse to start if init_db reports differences.
+        int init_code = RunInitDbScript();
+        if (init_code == 4) {
+            spdlog::critical("Database schema mismatch; see init_db.py output above.");
+            return init_code;
+        }
+        if (init_code != 0) {
+            spdlog::critical("Database init failed with code {}", init_code);
+            return init_code;
+        }
     }
 
-    Storage storage(db);
     LogStore log_store(config.log_dir);
-    ControlService service(config, storage, log_store);
+    Storage* storage = nullptr;
+    if (backend == "mongo") {
+        storage = new MongoStorage(db);
+    } else {
+        storage = new PgStorage(db);
+    }
+    ControlService service(std::move(config), storage, std::move(log_store));
     return service.Run();
 }

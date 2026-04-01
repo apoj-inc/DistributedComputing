@@ -20,6 +20,21 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_INC})
 find_package(Threads REQUIRED)
 find_package(PostgreSQL REQUIRED)
 
+include(FetchContent)
+
+set(ENABLE_TESTS OFF CACHE BOOL "Disable mongo-cxx-driver tests" FORCE)
+set(ENABLE_STATIC ON CACHE BOOL "Build static mongo-cxx-driver libs" FORCE)
+set(ENABLE_SHARED OFF CACHE BOOL "Disable shared mongo-cxx-driver libs" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libs in third-party deps" FORCE)
+
+FetchContent_Declare(
+    mongo-cxx-driver
+    GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
+    GIT_TAG r4.2.0
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(mongo-cxx-driver)
+
 FetchContent_Declare(
     libpqxx
     GIT_REPOSITORY https://github.com/jtv/libpqxx.git
@@ -30,5 +45,7 @@ FetchContent_MakeAvailable(libpqxx)
 
 list(APPEND PROJECT_LIB Threads::Threads)
 list(APPEND PROJECT_LIB libpqxx::pqxx)
+list(APPEND PROJECT_LIB bsoncxx_static)
+list(APPEND PROJECT_LIB mongocxx_static)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_LIB})

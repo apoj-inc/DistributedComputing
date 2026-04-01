@@ -17,6 +17,8 @@ C++ distributed computing system with Master, Worker, and CLI components.
 - CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
 - Python 3 with `psycopg2-binary` for `scripts/init_db.py`
+- Build prerequisites for FetchContent MongoDB C++ driver on Linux:
+  `pkg-config`, `libssl-dev`, `libsasl2-dev`, `zlib1g-dev`
 
 ## Header-only dependencies (third_party)
 Place the header-only libraries into `third_party/`:
@@ -25,6 +27,7 @@ Place the header-only libraries into `third_party/`:
 
 ## Configuration
 Database (used by Master and `scripts/init_db.py`):
+- `DB_BACKEND` (default: `postgres`; allowed: `postgres`, `mongo`)
 - `DB_HOST` (default: `localhost`)
 - `DB_PORT` (default: `5432`)
 - `DB_USER` (required)
@@ -32,6 +35,8 @@ Database (used by Master and `scripts/init_db.py`):
 - `DB_NAME` (required)
 - `DB_SSLMODE` (optional)
 - `DB_CONFIG` (optional path to `.env` file; e.g. `configs/db.env`)
+- `MONGO_URI` (required when `DB_BACKEND=mongo`; e.g. `mongodb://127.0.0.1:27017`)
+- `MONGO_DB` (required when `DB_BACKEND=mongo`)
 
 Master service:
 - `MASTER_HOST` (default: `0.0.0.0`)
@@ -56,6 +61,10 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Mongo backend note:
+- Master pulls `mongo-cxx-driver` via CMake `FetchContent` (`r4.2.0`).
+- If you switch between WSL and Windows build contexts, use a fresh build directory to avoid CMake cache/source path mismatch.
+
 ### One command: native + arm + win_worker
 Build matrix into a dedicated folder (`build/full`) with one command:
 ```
@@ -76,23 +85,35 @@ Notes:
 - You can override ARM compiler prefix: `DC_ARM_CROSS_PREFIX=<prefix> ./scripts/build_full_matrix.sh`
 
 ## Tests
-Integration tests for Master run via CTest and start a temporary Master instance.
-They require a reachable PostgreSQL database and Python with `psycopg2-binary`.
+All repository tests are run with `pytest`.
+Current suite covers binary smoke/integration checks and does not require PostgreSQL.
 
-Required env vars for tests:
-- `DC_TEST_DB_USER`
-- `DC_TEST_DB_NAME`
-
-Optional overrides:
-- `DC_TEST_DB_HOST` (default: `localhost`)
-- `DC_TEST_DB_PORT` (default: `5432`)
-- `DC_TEST_DB_PASSWORD` (default: empty)
-- `DC_TEST_DB_SSLMODE` (default: empty)
-
-Run:
+Install Python dependencies:
 ```
-ctest --test-dir build
+python -m pip install -r requirements.txt
 ```
+
+Build binaries first (Linux preset expected by default test paths):
+```
+cmake --preset x86_64-linux -S . -B build/x86_64-linux -G Ninja
+cmake --build build/x86_64-linux --config Release
+```
+
+Run all tests:
+```
+python -m pytest
+```
+
+Run only smoke tests:
+```
+python -m pytest -m smoke
+```
+
+Optional binary path overrides:
+- `DC_BUILD_DIR` (default: `build/x86_64-linux`)
+- `DC_MASTER_BIN`
+- `DC_WORKER_BIN`
+- `DC_CLI_BIN`
 
 ## Run Master
 ```
@@ -100,9 +121,10 @@ export DB_CONFIG=configs/db.env
 ./build/src/master/dc_master
 ```
 
-On startup the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_db.py`).
+When `DB_BACKEND=postgres`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_db.py`).
 If schema differences are detected, the script prints
 diffs and Master exits with code `4`.
+When `DB_BACKEND=mongo`, this init script is skipped.
 
 ## Example env for Master
 Create a `.env` file (or reuse `configs/master.env`) and export it before запуском:
@@ -113,6 +135,7 @@ DB_USER=postgres
 DB_PASSWORD=secret
 DB_NAME=distributed
 DB_SSLMODE=disable
+DB_BACKEND=postgres
 
 MASTER_HOST=0.0.0.0
 MASTER_PORT=8080

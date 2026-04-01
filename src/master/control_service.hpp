@@ -5,8 +5,8 @@
 #include <string>
 #include <thread>
 
-#include "log_store.h"
-#include "storage.h"
+#include "log_store.hpp"
+#include "storage.hpp"
 
 namespace httplib {
 class Request;
@@ -29,7 +29,7 @@ struct MasterConfig {
 // REST API control service for Master.
 class ControlService {
 public:
-    ControlService(MasterConfig config, Storage storage, LogStore log_store);
+    ControlService(MasterConfig config, Storage* storage, LogStore log_store);
     ~ControlService();
 
     // Blocking call; returns when server is stopped.
@@ -50,11 +50,12 @@ private:
     void HandleGetLogs(const httplib::Request& req, httplib::Response& res);
     void HandleTailLogs(const httplib::Request& req, httplib::Response& res);
     void HandleUploadLogs(const httplib::Request& req, httplib::Response& res);
+    void HandleHealth(const httplib::Request& req, httplib::Response& res);
     void StartMaintenanceThread();
     void StopMaintenanceThread();
 
     MasterConfig config_;
-    Storage storage_;
+    std::unique_ptr<Storage> storage_;
     LogStore log_store_;
 
     std::atomic<bool> running_{false};

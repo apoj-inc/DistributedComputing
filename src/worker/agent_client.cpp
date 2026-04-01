@@ -1,10 +1,10 @@
-#include "agent_client.h"
+#include "agent_client.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <sstream>
 
-#include "common/string_utils.h"
+#include "common/string_utils.hpp"
 
 namespace dc {
 namespace worker {
