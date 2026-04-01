@@ -6,7 +6,7 @@
 namespace dc {
 namespace master {
 
-// File-backed log storage layout:
+// File-backed log broker layout:
 //   LOG_DIR/<task_id>/stdout.log
 //   LOG_DIR/<task_id>/stderr.log
 //   LOG_DIR/<task_id>/meta.json

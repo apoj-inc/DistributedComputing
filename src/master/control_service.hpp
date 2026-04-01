@@ -6,7 +6,7 @@
 #include <thread>
 
 #include "log_store.hpp"
-#include "storage.hpp"
+#include "broker/broker.hpp"
 
 namespace httplib {
 class Request;
@@ -15,6 +15,7 @@ class Server;
 }
 
 namespace dc {
+using namespace broker;
 namespace master {
 
 struct MasterConfig {
@@ -29,7 +30,7 @@ struct MasterConfig {
 // REST API control service for Master.
 class ControlService {
 public:
-    ControlService(MasterConfig config, Storage* storage, LogStore log_store);
+    ControlService(MasterConfig config, Broker* broker, LogStore log_store);
     ~ControlService();
 
     // Blocking call; returns when server is stopped.
@@ -55,7 +56,7 @@ private:
     void StopMaintenanceThread();
 
     MasterConfig config_;
-    std::unique_ptr<Storage> storage_;
+    std::unique_ptr<Broker> broker_;
     LogStore log_store_;
 
     std::atomic<bool> running_{false};

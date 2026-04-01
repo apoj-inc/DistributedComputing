@@ -7,7 +7,7 @@
 #include "common/string_utils.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 enum class AgentStatus { Idle, Busy, Offline };
 enum class TaskState { Queued, Running, Succeeded, Failed, Canceled };
@@ -109,5 +109,5 @@ inline const char* TaskStateToApi(TaskState state) {
 }
 
 
-}  // namespace master
+}  // namespace broker
 }  // namespace dc

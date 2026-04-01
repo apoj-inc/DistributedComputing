@@ -15,8 +15,8 @@
 #include "common/env.hpp"
 #include "common/logging.hpp"
 #include "control_service.hpp"
-#include "mongo_storage.hpp"
-#include "pg_storage.hpp"
+#include "broker/mongo_broker.hpp"
+#include "broker/pg_broker.hpp"
 
 namespace {
 
@@ -231,7 +231,7 @@ int main(int argc, char* argv[]) {
         static_cast<std::size_t>(dc::common::GetEnvIntOrDefault("MAX_LOG_UPLOAD_BYTES",
                                                                 10 * 1024 * 1024));
 
-    DbConfig db;
+    dc::broker::DbConfig db;
     const std::string backend = ToLower(dc::common::GetEnvOrDefault("DB_BACKEND", "postgres"));
     if (backend != "postgres" && backend != "mongo") {
         spdlog::critical("Invalid DB_BACKEND '{}'. Expected 'postgres' or 'mongo'.", backend);
@@ -281,12 +281,12 @@ int main(int argc, char* argv[]) {
     }
 
     LogStore log_store(config.log_dir);
-    Storage* storage = nullptr;
+    dc::broker::Broker* broker = nullptr;
     if (backend == "mongo") {
-        storage = new MongoStorage(db);
+        broker = new dc::broker::MongoBroker(db);
     } else {
-        storage = new PgStorage(db);
+        broker = new dc::broker::PgBroker(db);
     }
-    ControlService service(std::move(config), storage, std::move(log_store));
+    ControlService service(std::move(config), broker, std::move(log_store));
     return service.Run();
 }
