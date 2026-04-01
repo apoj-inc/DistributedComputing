@@ -1,63 +1,66 @@
-# tests/conftest.py
-import subprocess
-import time
-import pytest
-import requests
-import json
+from __future__ import annotations
+
 import os
+import pathlib
+import subprocess
+from typing import Callable
 
-def wait_for_server(url: str, timeout:int=30):
-    """Poll the server until it responds or timeout."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            response = requests.get(url)
-            if response.status_code < 500:  # Accept any non‑server‑error
-                return True
-        except requests.ConnectionError:
-            pass
-        time.sleep(0.5)
-    raise RuntimeError(f"Server did not become ready within {timeout}s")
-
-@pytest.fixture(scope="session")
-def server_url():
-    
-    # Optional: write a config file
-    config_file = os.path.dirname(__file__)+'/config/master_env.json'
-    config = json.loads(config_file)
-    
-    port = config.MASTER_PORT
-    base_url = f"http://{config.MASTER_HOST}:{port}"
+import pytest
 
 
-    # 2. Start the server process
-    # Adjust the command to match how you start your server
-    server_cmd = [os.path.dirname(__file__)+'/../build/x86_64-linux/src/master/dc_master', "--config", str(config_file)]
-    # If the server logs to stderr, you can capture output for debugging
-    server_process = subprocess.Popen(
-        server_cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
+def _repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parent.parent
+
+
+def _build_dir() -> pathlib.Path:
+    override = os.getenv("DC_BUILD_DIR")
+    if override:
+        return pathlib.Path(override).expanduser().resolve()
+    return _repo_root() / "build" / "x86_64-linux"
+
+
+def _resolve_binary_path(env_var: str, relative_path: str) -> pathlib.Path:
+    override = os.getenv(env_var)
+    if override:
+        return pathlib.Path(override).expanduser().resolve()
+    return (_build_dir() / relative_path).resolve()
+
+
+def _require_binary(path: pathlib.Path, env_var: str) -> pathlib.Path:
+    if path.is_file():
+        return path
+    pytest.skip(
+        f"Binary not found at {path}. Build binaries first or set {env_var} to an executable path."
     )
 
-    # 3. Wait for readiness
-    try:
-        wait_for_server(f"{base_url}/health")   # Assuming a health endpoint
-    except Exception:
-        # If startup fails, kill the process and show its output
-        server_process.terminate()
-        stdout, _ = server_process.communicate(timeout=5)
-        raise RuntimeError(f"Server failed to start:\n{stdout}")
 
-    # 4. Provide the URL to tests
-    yield base_url
+@pytest.fixture(scope="session")
+def dc_master_bin() -> pathlib.Path:
+    path = _resolve_binary_path("DC_MASTER_BIN", "src/master/dc_master")
+    return _require_binary(path, "DC_MASTER_BIN")
 
-    # 5. Teardown: kill the server
-    server_process.terminate()
-    try:
-        server_process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        server_process.kill()
-        server_process.wait()
+
+@pytest.fixture(scope="session")
+def dc_worker_bin() -> pathlib.Path:
+    path = _resolve_binary_path("DC_WORKER_BIN", "src/worker/dc_worker")
+    return _require_binary(path, "DC_WORKER_BIN")
+
+
+@pytest.fixture(scope="session")
+def dc_cli_bin() -> pathlib.Path:
+    path = _resolve_binary_path("DC_CLI_BIN", "src/cli/dc_cli")
+    return _require_binary(path, "DC_CLI_BIN")
+
+
+@pytest.fixture(scope="session")
+def run_binary() -> Callable[..., subprocess.CompletedProcess[str]]:
+    def _run_binary(binary: pathlib.Path, *args: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(binary), *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+
+    return _run_binary

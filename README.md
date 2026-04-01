@@ -76,23 +76,35 @@ Notes:
 - You can override ARM compiler prefix: `DC_ARM_CROSS_PREFIX=<prefix> ./scripts/build_full_matrix.sh`
 
 ## Tests
-Integration tests for Master run via CTest and start a temporary Master instance.
-They require a reachable PostgreSQL database and Python with `psycopg2-binary`.
+All repository tests are run with `pytest`.
+Current suite covers binary smoke/integration checks and does not require PostgreSQL.
 
-Required env vars for tests:
-- `DC_TEST_DB_USER`
-- `DC_TEST_DB_NAME`
-
-Optional overrides:
-- `DC_TEST_DB_HOST` (default: `localhost`)
-- `DC_TEST_DB_PORT` (default: `5432`)
-- `DC_TEST_DB_PASSWORD` (default: empty)
-- `DC_TEST_DB_SSLMODE` (default: empty)
-
-Run:
+Install Python dependencies:
 ```
-ctest --test-dir build
+python -m pip install -r requirements.txt
 ```
+
+Build binaries first (Linux preset expected by default test paths):
+```
+cmake --preset x86_64-linux -S . -B build/x86_64-linux -G Ninja
+cmake --build build/x86_64-linux --config Release
+```
+
+Run all tests:
+```
+python -m pytest
+```
+
+Run only smoke tests:
+```
+python -m pytest -m smoke
+```
+
+Optional binary path overrides:
+- `DC_BUILD_DIR` (default: `build/x86_64-linux`)
+- `DC_MASTER_BIN`
+- `DC_WORKER_BIN`
+- `DC_CLI_BIN`
 
 ## Run Master
 ```
