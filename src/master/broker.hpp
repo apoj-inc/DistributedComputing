@@ -91,16 +91,16 @@ enum class CancelTaskResult {
     Error,
 };
 
-enum class StorageType {
+enum class BrokerType {
     PGSQL,
     MONGO,
 };
 
-class Storage {
+class Broker {
 public:
-    explicit Storage(DbConfig& config, StorageType storageType): config_(config), storage_type_(storageType){};
+    explicit Broker(DbConfig& config, BrokerType brokerType): config_(config), broker_type_(brokerType){};
 
-    virtual ~Storage() = default;
+    virtual ~Broker() = default;
 
     virtual bool UpsertAgent(const AgentInput& agent) = 0;
     virtual bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) = 0;
@@ -133,14 +133,14 @@ public:
     // Marks agents offline and requeues tasks assigned to them.
     virtual int MarkOfflineAgentsAndRequeue(int offline_after_sec) = 0;
 
-    const StorageType GetStorageType() const {
-        return storage_type_;
+    const BrokerType GetBrokerType() const {
+        return broker_type_;
     };
 
 protected:
     virtual std::string ConnectionString() const = 0;
 
-    const StorageType storage_type_;
+    const BrokerType broker_type_;
     DbConfig config_;
 };
 

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "storage.hpp"
+#include "broker.hpp"
 #include "status.hpp"
 
 namespace dc {
 namespace master {
 
-class PgStorage final : public Storage {
+class PgBroker final : public Broker {
 public:
-    explicit PgStorage(DbConfig& config);   // constructor
+    explicit PgBroker(DbConfig& config);   // constructor
 
     bool UpsertAgent(const AgentInput& agent) override;
     bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) override;

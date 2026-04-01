@@ -1,4 +1,4 @@
-#include "mongo_storage.hpp"
+#include "mongo_broker.hpp"
 
 #include <chrono>
 #include <ctime>
@@ -156,8 +156,8 @@ bsoncxx::document::value JsonDoc(const json& source) {
 
 }  // namespace
 
-MongoStorage::MongoStorage(DbConfig& config)
-    : Storage(config, StorageType::MONGO),
+MongoBroker::MongoBroker(DbConfig& config)
+    : Broker(config, BrokerType::MONGO),
       client_(mongocxx::uri(ConnectionString())),
       db_(client_[config_.dbname]),
       agents_(db_["agents"]),
@@ -167,11 +167,11 @@ MongoStorage::MongoStorage(DbConfig& config)
     EnsureIndexes();
 }
 
-std::string MongoStorage::ConnectionString() const {
+std::string MongoBroker::ConnectionString() const {
     return config_.host;
 }
 
-void MongoStorage::EnsureIndexes() {
+void MongoBroker::EnsureIndexes() {
     mongocxx::options::index unique;
     unique.unique(true);
 
@@ -190,7 +190,7 @@ void MongoStorage::EnsureIndexes() {
     task_assignments_.create_index(make_document(kvp("agent_id", 1), kvp("assigned_at", -1)));
 }
 
-std::int64_t MongoStorage::NextTaskId(mongocxx::client_session& session) {
+std::int64_t MongoBroker::NextTaskId(mongocxx::client_session& session) {
     mongocxx::options::find_one_and_update opts;
     opts.upsert(true);
     opts.return_document(mongocxx::options::return_document::k_after);
@@ -209,7 +209,7 @@ std::int64_t MongoStorage::NextTaskId(mongocxx::client_session& session) {
     return *seq;
 }
 
-bool MongoStorage::UpsertAgent(const AgentInput& agent) {
+bool MongoBroker::UpsertAgent(const AgentInput& agent) {
     auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
     auto result = agents_.update_one(
         make_document(kvp("agent_id", agent.agent_id)),
@@ -226,7 +226,7 @@ bool MongoStorage::UpsertAgent(const AgentInput& agent) {
     return static_cast<bool>(result);
 }
 
-bool MongoStorage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
+bool MongoBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
     auto result = agents_.update_one(
         make_document(kvp("agent_id", heartbeat.agent_id)),
@@ -236,7 +236,7 @@ bool MongoStorage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     return result && result->matched_count() > 0;
 }
 
-std::optional<AgentRecord> MongoStorage::GetAgent(const std::string& agent_id) {
+std::optional<AgentRecord> MongoBroker::GetAgent(const std::string& agent_id) {
     auto result = agents_.find_one(make_document(kvp("agent_id", agent_id)));
     if (!result) {
         return std::nullopt;
@@ -256,7 +256,7 @@ std::optional<AgentRecord> MongoStorage::GetAgent(const std::string& agent_id) {
     return record;
 }
 
-std::vector<AgentRecord> MongoStorage::ListAgents(const std::optional<AgentStatus>& status,
+std::vector<AgentRecord> MongoBroker::ListAgents(const std::optional<AgentStatus>& status,
                                                   int limit,
                                                   int offset) {
     document filter;
@@ -288,7 +288,7 @@ std::vector<AgentRecord> MongoStorage::ListAgents(const std::optional<AgentStatu
     return agents;
 }
 
-std::int64_t MongoStorage::CreateTask(const TaskInput& task) {
+std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
     auto session = client_.start_session();
     session.start_transaction();
     try {
@@ -327,7 +327,7 @@ std::int64_t MongoStorage::CreateTask(const TaskInput& task) {
     }
 }
 
-std::optional<TaskRecord> MongoStorage::GetTask(std::int64_t task_id) {
+std::optional<TaskRecord> MongoBroker::GetTask(std::int64_t task_id) {
     auto result = tasks_.find_one(make_document(kvp("task_id", task_id)));
     if (!result) {
         return std::nullopt;
@@ -363,7 +363,7 @@ std::optional<TaskRecord> MongoStorage::GetTask(std::int64_t task_id) {
     return record;
 }
 
-std::vector<TaskSummary> MongoStorage::ListTasks(const std::optional<TaskState>& state,
+std::vector<TaskSummary> MongoBroker::ListTasks(const std::optional<TaskState>& state,
                                                  const std::optional<std::string>& agent_id,
                                                  int limit,
                                                  int offset) {
@@ -392,7 +392,7 @@ std::vector<TaskSummary> MongoStorage::ListTasks(const std::optional<TaskState>&
     return tasks;
 }
 
-std::optional<std::vector<TaskDispatch>> MongoStorage::PollTasksForAgent(const std::string& agent_id,
+std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const std::string& agent_id,
                                                                          int free_slots) {
     auto session = client_.start_session();
     session.start_transaction();
@@ -506,7 +506,7 @@ std::optional<std::vector<TaskDispatch>> MongoStorage::PollTasksForAgent(const s
     }
 }
 
-bool MongoStorage::UpdateTaskStatus(std::int64_t task_id,
+bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
                                     TaskState state,
                                     const std::optional<int>& exit_code,
                                     const std::optional<std::string>& started_at,
@@ -580,7 +580,7 @@ bool MongoStorage::UpdateTaskStatus(std::int64_t task_id,
     }
 }
 
-CancelTaskResult MongoStorage::CancelTask(std::int64_t task_id) {
+CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
     auto session = client_.start_session();
     session.start_transaction();
     try {
@@ -628,7 +628,7 @@ CancelTaskResult MongoStorage::CancelTask(std::int64_t task_id) {
     }
 }
 
-int MongoStorage::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
+int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     auto session = client_.start_session();
     session.start_transaction();
     try {

@@ -50,16 +50,16 @@ std::string QuoteArg(const std::string& arg) {
 
 #else
 
-std::vector<char*> BuildArgv(const TaskDispatch& task, std::vector<std::string>* storage) {
-    storage->clear();
-    storage->reserve(task.args.size() + 1);
-    storage->push_back(task.command);
+std::vector<char*> BuildArgv(const TaskDispatch& task, std::vector<std::string>* broker) {
+    broker->clear();
+    broker->reserve(task.args.size() + 1);
+    broker->push_back(task.command);
     for (const auto& arg : task.args) {
-        storage->push_back(arg);
+        broker->push_back(arg);
     }
     std::vector<char*> argv;
-    argv.reserve(storage->size() + 1);
-    for (auto& s : *storage) {
+    argv.reserve(broker->size() + 1);
+    for (auto& s : *broker) {
         argv.push_back(s.data());
     }
     argv.push_back(nullptr);
@@ -197,8 +197,8 @@ TaskExecutionResult TaskExecutor::Run(const TaskDispatch& task,
 
 #else
     // POSIX path
-    std::vector<std::string> arg_storage;
-    std::vector<char*> argv = BuildArgv(task, &arg_storage);
+    std::vector<std::string> arg_broker;
+    std::vector<char*> argv = BuildArgv(task, &arg_broker);
 
     pid_t pid = fork();
     if (pid == 0) {

@@ -1,4 +1,4 @@
-#include "pg_storage.hpp"
+#include "pg_broker.hpp"
 
 #include <sstream>
 
@@ -54,9 +54,9 @@ json BuildConstraintsFromRow(const pqxx::row& row) {
 
 }  // namespace
 
-PgStorage::PgStorage(DbConfig& config) : Storage(config, StorageType::PGSQL) {}
+PgBroker::PgBroker(DbConfig& config) : Broker(config, BrokerType::PGSQL) {}
 
-std::string PgStorage::ConnectionString() const {
+std::string PgBroker::ConnectionString() const {
     std::ostringstream out;
     if (!config_.host.empty()) {
         out << "host=" << config_.host << " ";
@@ -79,7 +79,7 @@ std::string PgStorage::ConnectionString() const {
     return out.str();
 }
 
-bool PgStorage::UpsertAgent(const AgentInput& agent) {
+bool PgBroker::UpsertAgent(const AgentInput& agent) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     tx.exec_params(
@@ -104,7 +104,7 @@ bool PgStorage::UpsertAgent(const AgentInput& agent) {
     return true;
 }
 
-bool PgStorage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
+bool PgBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -118,7 +118,7 @@ bool PgStorage::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     return true;
 }
 
-std::optional<AgentRecord> PgStorage::GetAgent(const std::string& agent_id) {
+std::optional<AgentRecord> PgBroker::GetAgent(const std::string& agent_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -144,7 +144,7 @@ std::optional<AgentRecord> PgStorage::GetAgent(const std::string& agent_id) {
     return record;
 }
 
-std::vector<AgentRecord> PgStorage::ListAgents(const std::optional<AgentStatus>& status,
+std::vector<AgentRecord> PgBroker::ListAgents(const std::optional<AgentStatus>& status,
                                              int limit,
                                              int offset) {
     pqxx::connection conn(ConnectionString());
@@ -185,7 +185,7 @@ std::vector<AgentRecord> PgStorage::ListAgents(const std::optional<AgentStatus>&
     return agents;
 }
 
-std::int64_t PgStorage::CreateTask(const TaskInput& task) {
+std::int64_t PgBroker::CreateTask(const TaskInput& task) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 
@@ -220,7 +220,7 @@ std::int64_t PgStorage::CreateTask(const TaskInput& task) {
     return task_id;
 }
 
-std::optional<TaskRecord> PgStorage::GetTask(std::int64_t task_id) {
+std::optional<TaskRecord> PgBroker::GetTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
     auto result = tx.exec_params(
@@ -271,7 +271,7 @@ std::optional<TaskRecord> PgStorage::GetTask(std::int64_t task_id) {
     return record;
 }
 
-std::vector<TaskSummary> PgStorage::ListTasks(const std::optional<TaskState>& state,
+std::vector<TaskSummary> PgBroker::ListTasks(const std::optional<TaskState>& state,
                                             const std::optional<std::string>& agent_id,
                                             int limit,
                                             int offset) {
@@ -307,7 +307,7 @@ std::vector<TaskSummary> PgStorage::ListTasks(const std::optional<TaskState>& st
     return tasks;
 }
 
-std::optional<std::vector<TaskDispatch>> PgStorage::PollTasksForAgent(
+std::optional<std::vector<TaskDispatch>> PgBroker::PollTasksForAgent(
     const std::string& agent_id,
     int free_slots) {
     pqxx::connection conn(ConnectionString());
@@ -397,7 +397,7 @@ std::optional<std::vector<TaskDispatch>> PgStorage::PollTasksForAgent(
     return dispatches;
 }
 
-bool PgStorage::UpdateTaskStatus(std::int64_t task_id,
+bool PgBroker::UpdateTaskStatus(std::int64_t task_id,
                                TaskState state,
                                const std::optional<int>& exit_code,
                                const std::optional<std::string>& started_at,
@@ -482,7 +482,7 @@ bool PgStorage::UpdateTaskStatus(std::int64_t task_id,
     return true;
 }
 
-CancelTaskResult PgStorage::CancelTask(std::int64_t task_id) {
+CancelTaskResult PgBroker::CancelTask(std::int64_t task_id) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 
@@ -517,7 +517,7 @@ CancelTaskResult PgStorage::CancelTask(std::int64_t task_id) {
     return CancelTaskResult::Ok;
 }
 
-int PgStorage::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
+int PgBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     pqxx::connection conn(ConnectionString());
     pqxx::work tx(conn);
 

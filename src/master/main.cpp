@@ -15,8 +15,8 @@
 #include "common/env.hpp"
 #include "common/logging.hpp"
 #include "control_service.hpp"
-#include "mongo_storage.hpp"
-#include "pg_storage.hpp"
+#include "mongo_broker.hpp"
+#include "pg_broker.hpp"
 
 namespace {
 
@@ -281,12 +281,12 @@ int main(int argc, char* argv[]) {
     }
 
     LogStore log_store(config.log_dir);
-    Storage* storage = nullptr;
+    Broker* broker = nullptr;
     if (backend == "mongo") {
-        storage = new MongoStorage(db);
+        broker = new MongoBroker(db);
     } else {
-        storage = new PgStorage(db);
+        broker = new PgBroker(db);
     }
-    ControlService service(std::move(config), storage, std::move(log_store));
+    ControlService service(std::move(config), broker, std::move(log_store));
     return service.Run();
 }

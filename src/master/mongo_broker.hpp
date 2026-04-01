@@ -5,14 +5,14 @@
 #include <mongocxx/v_noabi/mongocxx/collection.hpp>
 #include <mongocxx/v_noabi/mongocxx/database.hpp>
 
-#include "storage.hpp"
+#include "broker.hpp"
 
 namespace dc {
 namespace master {
 
-class MongoStorage final : public Storage {
+class MongoBroker final : public Broker {
 public:
-    explicit MongoStorage(DbConfig& config);
+    explicit MongoBroker(DbConfig& config);
 
     bool UpsertAgent(const AgentInput& agent) override;
     bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) override;
