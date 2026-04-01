@@ -4,7 +4,7 @@
 #include "status.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 class PgBroker final : public Broker {
 public:
@@ -34,5 +34,5 @@ public:
 protected:
     std::string ConnectionString() const override;
 };
-}  // namespace master
+}  // namespace broker
 }  // namespace dc

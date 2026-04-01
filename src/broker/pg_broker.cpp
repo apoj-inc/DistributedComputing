@@ -8,7 +8,7 @@
 #include "status.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 using json = nlohmann::json;
 
@@ -557,5 +557,5 @@ int PgBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     return static_cast<int>(agents.size());
 }
 
-}  // namespace master
+}  // namespace broker
 }  // namespace dc

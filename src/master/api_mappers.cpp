@@ -3,9 +3,10 @@
 #include <cctype>
 #include <limits>
 
-#include "status.hpp"
+#include "broker/status.hpp"
 
 namespace dc {
+using namespace broker;
 namespace master {
 namespace api {
 

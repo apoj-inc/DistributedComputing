@@ -10,7 +10,7 @@
 #include "status.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 struct DbConfig {
     std::string host;
@@ -144,5 +144,5 @@ protected:
     DbConfig config_;
 };
 
-}  // namespace master
+}  // namespace broker
 }  // namespace dc

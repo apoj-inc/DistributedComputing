@@ -6,9 +6,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include "broker.hpp"
+#include "broker/broker.hpp"
 
 namespace dc {
+using namespace broker;
 namespace master {
 namespace api {
 

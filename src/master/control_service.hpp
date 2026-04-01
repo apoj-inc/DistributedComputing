@@ -6,7 +6,7 @@
 #include <thread>
 
 #include "log_store.hpp"
-#include "broker.hpp"
+#include "broker/broker.hpp"
 
 namespace httplib {
 class Request;
@@ -15,6 +15,7 @@ class Server;
 }
 
 namespace dc {
+using namespace broker;
 namespace master {
 
 struct MasterConfig {

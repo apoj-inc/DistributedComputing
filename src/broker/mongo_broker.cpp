@@ -23,7 +23,7 @@
 #include "common/logging.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 using bsoncxx::builder::basic::array;
 using bsoncxx::builder::basic::document;
@@ -690,5 +690,5 @@ int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     }
 }
 
-}  // namespace master
+}  // namespace broker
 }  // namespace dc

@@ -8,7 +8,7 @@
 #include "broker.hpp"
 
 namespace dc {
-namespace master {
+namespace broker {
 
 class MongoBroker final : public Broker {
 public:
@@ -57,5 +57,5 @@ private:
     mongocxx::collection counters_;
 };
 
-}  // namespace master
+}  // namespace broker
 }  // namespace dc
