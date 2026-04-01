@@ -54,13 +54,22 @@ def dc_cli_bin() -> pathlib.Path:
 
 @pytest.fixture(scope="session")
 def run_binary() -> Callable[..., subprocess.CompletedProcess[str]]:
-    def _run_binary(binary: pathlib.Path, *args: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+    def _run_binary(
+        binary: pathlib.Path,
+        *args: str,
+        timeout: int = 15,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        process_env = os.environ.copy()
+        if env:
+            process_env.update(env)
         return subprocess.run(
             [str(binary), *args],
             capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
+            env=process_env,
         )
 
     return _run_binary

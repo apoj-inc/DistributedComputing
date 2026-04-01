@@ -19,6 +19,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_INC})
 
 find_package(Threads REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(bsoncxx REQUIRED)
+find_package(mongocxx REQUIRED)
+
+include(FetchContent)
 
 FetchContent_Declare(
     libpqxx
@@ -30,5 +34,25 @@ FetchContent_MakeAvailable(libpqxx)
 
 list(APPEND PROJECT_LIB Threads::Threads)
 list(APPEND PROJECT_LIB libpqxx::pqxx)
+
+if(TARGET mongo::mongocxx_shared)
+    list(APPEND PROJECT_LIB mongo::mongocxx_shared)
+elseif(TARGET mongocxx_shared)
+    list(APPEND PROJECT_LIB mongocxx_shared)
+elseif(TARGET mongocxx::mongocxx)
+    list(APPEND PROJECT_LIB mongocxx::mongocxx)
+else()
+    message(FATAL_ERROR "Could not find mongocxx CMake target")
+endif()
+
+if(TARGET mongo::bsoncxx_shared)
+    list(APPEND PROJECT_LIB mongo::bsoncxx_shared)
+elseif(TARGET bsoncxx_shared)
+    list(APPEND PROJECT_LIB bsoncxx_shared)
+elseif(TARGET bsoncxx::bsoncxx)
+    list(APPEND PROJECT_LIB bsoncxx::bsoncxx)
+else()
+    message(FATAL_ERROR "Could not find bsoncxx CMake target")
+endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_LIB})

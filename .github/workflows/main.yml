@@ -15,6 +15,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install MongoDB C++ driver deps
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libmongocxx-dev libbsoncxx-dev
+
     - name: Configure CMake
       run: cmake --preset x86_64-linux -S ${{github.workspace}} -B ${{github.workspace}}/build/x86_64-linux -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G Ninja
 

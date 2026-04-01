@@ -16,6 +16,7 @@ C++ distributed computing system with Master, Worker, and CLI components.
 ## Dependencies
 - CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
+- MongoDB C++ driver (`mongocxx` + `bsoncxx`) for master build
 - Python 3 with `psycopg2-binary` for `scripts/init_db.py`
 
 ## Header-only dependencies (third_party)
@@ -25,6 +26,7 @@ Place the header-only libraries into `third_party/`:
 
 ## Configuration
 Database (used by Master and `scripts/init_db.py`):
+- `DB_BACKEND` (default: `postgres`; allowed: `postgres`, `mongo`)
 - `DB_HOST` (default: `localhost`)
 - `DB_PORT` (default: `5432`)
 - `DB_USER` (required)
@@ -32,6 +34,8 @@ Database (used by Master and `scripts/init_db.py`):
 - `DB_NAME` (required)
 - `DB_SSLMODE` (optional)
 - `DB_CONFIG` (optional path to `.env` file; e.g. `configs/db.env`)
+- `MONGO_URI` (required when `DB_BACKEND=mongo`; e.g. `mongodb://127.0.0.1:27017`)
+- `MONGO_DB` (required when `DB_BACKEND=mongo`)
 
 Master service:
 - `MASTER_HOST` (default: `0.0.0.0`)
@@ -112,9 +116,10 @@ export DB_CONFIG=configs/db.env
 ./build/src/master/dc_master
 ```
 
-On startup the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_db.py`).
+When `DB_BACKEND=postgres`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_db.py`).
 If schema differences are detected, the script prints
 diffs and Master exits with code `4`.
+When `DB_BACKEND=mongo`, this init script is skipped.
 
 ## Example env for Master
 Create a `.env` file (or reuse `configs/master.env`) and export it before запуском:
@@ -125,6 +130,7 @@ DB_USER=postgres
 DB_PASSWORD=secret
 DB_NAME=distributed
 DB_SSLMODE=disable
+DB_BACKEND=postgres
 
 MASTER_HOST=0.0.0.0
 MASTER_PORT=8080
