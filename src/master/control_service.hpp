@@ -50,6 +50,7 @@ private:
     void HandleGetLogs(const httplib::Request& req, httplib::Response& res);
     void HandleTailLogs(const httplib::Request& req, httplib::Response& res);
     void HandleUploadLogs(const httplib::Request& req, httplib::Response& res);
+    void HandleHealth(const httplib::Request& req, httplib::Response& res);
     void StartMaintenanceThread();
     void StopMaintenanceThread();
 

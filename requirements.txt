@@ -1,3 +1,5 @@
 coverage
 pytest
+pytest-mock
+requests
 yoyo-migrations

@@ -626,6 +626,11 @@ void ControlService::HandleUploadLogs(const httplib::Request& req,
     SetJsonResponse(res, response, 200);
 }
 
+
+void ControlService::HandleHealth(const httplib::Request& req, httplib::Response& res){
+    res.status = 200;
+}
+
 void ControlService::StartMaintenanceThread() {
     running_.store(true);
     maintenance_thread_ = std::thread([this]() {
