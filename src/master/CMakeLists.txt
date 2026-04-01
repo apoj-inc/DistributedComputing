@@ -19,10 +19,16 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_INC})
 
 find_package(Threads REQUIRED)
 find_package(PostgreSQL REQUIRED)
-find_package(bsoncxx REQUIRED)
-find_package(mongocxx REQUIRED)
 
 include(FetchContent)
+
+FetchContent_Declare(
+    mongo-cxx-driver
+    GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
+    GIT_TAG r4.2.0
+    GIT_SHALLOW true
+)
+FetchContent_MakeAvailable(mongo-cxx-driver)
 
 FetchContent_Declare(
     libpqxx
@@ -34,25 +40,7 @@ FetchContent_MakeAvailable(libpqxx)
 
 list(APPEND PROJECT_LIB Threads::Threads)
 list(APPEND PROJECT_LIB libpqxx::pqxx)
-
-if(TARGET mongo::mongocxx_shared)
-    list(APPEND PROJECT_LIB mongo::mongocxx_shared)
-elseif(TARGET mongocxx_shared)
-    list(APPEND PROJECT_LIB mongocxx_shared)
-elseif(TARGET mongocxx::mongocxx)
-    list(APPEND PROJECT_LIB mongocxx::mongocxx)
-else()
-    message(FATAL_ERROR "Could not find mongocxx CMake target")
-endif()
-
-if(TARGET mongo::bsoncxx_shared)
-    list(APPEND PROJECT_LIB mongo::bsoncxx_shared)
-elseif(TARGET bsoncxx_shared)
-    list(APPEND PROJECT_LIB bsoncxx_shared)
-elseif(TARGET bsoncxx::bsoncxx)
-    list(APPEND PROJECT_LIB bsoncxx::bsoncxx)
-else()
-    message(FATAL_ERROR "Could not find bsoncxx CMake target")
-endif()
+list(APPEND PROJECT_LIB mongocxx::mongocxx)
+list(APPEND PROJECT_LIB bsoncxx::bsoncxx)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_LIB})
