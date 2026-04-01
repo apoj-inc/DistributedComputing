@@ -1,9 +1,9 @@
 #pragma once
 
-#include <mongocxx/client.hpp>
-#include <mongocxx/client_session.hpp>
-#include <mongocxx/collection.hpp>
-#include <mongocxx/database.hpp>
+#include <mongocxx/v_noabi/mongocxx/client.hpp>
+#include <mongocxx/v_noabi/mongocxx/client_session.hpp>
+#include <mongocxx/v_noabi/mongocxx/collection.hpp>
+#include <mongocxx/v_noabi/mongocxx/database.hpp>
 
 #include "storage.hpp"
 

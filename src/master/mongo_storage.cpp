@@ -9,18 +9,16 @@
 #include <string>
 #include <vector>
 
-#include <bsoncxx/builder/basic/array.hpp>
-#include <bsoncxx/builder/basic/document.hpp>
-#include <bsoncxx/builder/basic/kvp.hpp>
-#include <bsoncxx/builder/basic/make_array.hpp>
-#include <bsoncxx/builder/basic/make_document.hpp>
-#include <bsoncxx/json.hpp>
-#include <mongocxx/exception/exception.hpp>
-#include <mongocxx/instance.hpp>
-#include <mongocxx/options/find.hpp>
-#include <mongocxx/options/find_one_and_update.hpp>
-#include <mongocxx/options/index.hpp>
-#include <mongocxx/options/update.hpp>
+#include <bsoncxx/v_noabi/bsoncxx/builder/basic/array.hpp>
+#include <bsoncxx/v_noabi/bsoncxx/builder/basic/document.hpp>
+#include <bsoncxx/v_noabi/bsoncxx/builder/basic/kvp.hpp>
+#include <bsoncxx/v_noabi/bsoncxx/json.hpp>
+#include <mongocxx/v_noabi/mongocxx/exception/exception.hpp>
+#include <mongocxx/v_noabi/mongocxx/instance.hpp>
+#include <mongocxx/v_noabi/mongocxx/options/find.hpp>
+#include <mongocxx/v_noabi/mongocxx/options/find_one_and_update.hpp>
+#include <mongocxx/v_noabi/mongocxx/options/index.hpp>
+#include <mongocxx/v_noabi/mongocxx/options/update.hpp>
 
 #include "common/logging.hpp"
 
@@ -110,10 +108,10 @@ std::optional<bsoncxx::types::b_date> ParseIsoUtc(const std::string& raw) {
 
 std::optional<std::string> ReadString(const bsoncxx::document::view& doc, const char* key) {
     auto el = doc[key];
-    if (!el || el.type() != bsoncxx::type::k_utf8) {
+    if (!el || el.type() != bsoncxx::type::k_string) {
         return std::nullopt;
     }
-    return el.get_utf8().value.to_string();
+    return std::string(el.get_string().value);
 }
 
 std::optional<int> ReadInt(const bsoncxx::document::view& doc, const char* key) {
@@ -160,7 +158,7 @@ bsoncxx::document::value JsonDoc(const json& source) {
 
 MongoStorage::MongoStorage(DbConfig& config)
     : Storage(config, StorageType::MONGO),
-      client_(MongoInstance(), mongocxx::uri(ConnectionString())),
+      client_(mongocxx::uri(ConnectionString())),
       db_(client_[config_.dbname]),
       agents_(db_["agents"]),
       tasks_(db_["tasks"]),

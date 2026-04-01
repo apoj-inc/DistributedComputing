@@ -16,8 +16,9 @@ C++ distributed computing system with Master, Worker, and CLI components.
 ## Dependencies
 - CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
-- MongoDB C++ driver ('libbson`) for master build (sudo apt install libbson-dev)
 - Python 3 with `psycopg2-binary` for `scripts/init_db.py`
+- Build prerequisites for FetchContent MongoDB C++ driver on Linux:
+  `pkg-config`, `libssl-dev`, `libsasl2-dev`, `zlib1g-dev`
 
 ## Header-only dependencies (third_party)
 Place the header-only libraries into `third_party/`:
@@ -59,6 +60,10 @@ Worker service:
 cmake -S . -B build
 cmake --build build
 ```
+
+Mongo backend note:
+- Master pulls `mongo-cxx-driver` via CMake `FetchContent` (`r4.2.0`).
+- If you switch between WSL and Windows build contexts, use a fresh build directory to avoid CMake cache/source path mismatch.
 
 ### One command: native + arm + win_worker
 Build matrix into a dedicated folder (`build/full`) with one command:
