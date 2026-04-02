@@ -156,7 +156,7 @@ int RunInitDbScript() {
     const std::string config_path = dc::common::GetEnvOrDefault("DB_CONFIG", "");
     const std::string preferred_python = dc::common::GetEnvOrDefault("INIT_DB_PYTHON", "");
     const std::string init_db_script =
-        dc::common::GetEnvOrDefault("INIT_DB_SCRIPT", "scripts/init_db.py");
+        dc::common::GetEnvOrDefault("INIT_DB_SCRIPT", "scripts/init_pg.py");
 
     std::vector<std::string> candidates;
     if (!preferred_python.empty()) {
@@ -172,7 +172,7 @@ int RunInitDbScript() {
             command += " --config \"" + config_path + "\"";
         }
 
-        spdlog::info("Running DB init: {}", command);
+        spdlog::info("Running PostgreSQL migrations: {}", command);
         int raw_code = std::system(command.c_str());
         int code = NormalizeExitCode(raw_code);
 
@@ -302,14 +302,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (backend == "postgres") {
-        // Apply/init DB schema; refuse to start if init_db reports differences.
+        // Run Postgres migrations before broker startup.
         int init_code = RunInitDbScript();
-        if (init_code == 4) {
-            spdlog::critical("Database schema mismatch; see init_db.py output above.");
-            return init_code;
-        }
         if (init_code != 0) {
-            spdlog::critical("Database init failed with code {}", init_code);
+            spdlog::critical("PostgreSQL migrations failed with code {}", init_code);
             return init_code;
         }
     } else {
