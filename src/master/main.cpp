@@ -98,6 +98,11 @@ std::string ToLower(std::string value) {
     return value;
 }
 
+bool ParseBoolEnvValue(const std::string& value) {
+    const std::string lower = ToLower(TrimWhitespace(value));
+    return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
+}
+
 void PrintUsage() {
     std::cout << "Usage: dc_master [--env-file <path>]\n"
               << "Options:\n"
@@ -264,6 +269,10 @@ int main(int argc, char* argv[]) {
     config.max_log_upload_bytes =
         static_cast<std::size_t>(dc::common::GetEnvIntOrDefault("MAX_LOG_UPLOAD_BYTES",
                                                                 10 * 1024 * 1024));
+    const bool skip_db_migration = ParseBoolEnvValue(
+        dc::common::GetEnvOrDefault(
+            "MASTER_SKIP_DB_MIGRATION",
+            dc::common::GetEnvOrDefault("SKIP_DB_MIGRATION", "false")));
 
     dc::broker::DbConfig db;
     const std::string backend = ToLower(dc::common::GetEnvOrDefault("DB_BACKEND", "postgres"));
@@ -301,7 +310,9 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    if (backend == "postgres") {
+    if (skip_db_migration) {
+        spdlog::warn("DB migration step skipped by MASTER_SKIP_DB_MIGRATION/SKIP_DB_MIGRATION.");
+    } else if (backend == "postgres") {
         // Run Postgres migrations before broker startup.
         int init_code = RunInitDbScript();
         if (init_code != 0) {
