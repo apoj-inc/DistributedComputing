@@ -33,6 +33,19 @@ def test_master_mongo_backend_requires_connection_env(dc_master_bin, run_binary)
 
 
 @pytest.mark.integration
+def test_master_mongo_backend_rejects_malformed_uri(dc_master_bin, run_binary) -> None:
+    env = os.environ.copy()
+    env['DB_BACKEND'] = 'mongo'
+    env['MONGO_URI'] = 'localhost:27017'
+    env['MONGO_DB'] = 'dc_test'
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert "Invalid MONGO_URI" in output
+
+
+@pytest.mark.integration
 def test_master_runs_mongo_migration_script_on_mongo_backend(
     dc_master_bin, run_binary, tmp_path: Path
 ) -> None:

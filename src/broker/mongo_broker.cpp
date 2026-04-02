@@ -157,12 +157,15 @@ bsoncxx::document::value JsonDoc(const json& source) {
 
 MongoBroker::MongoBroker(DbConfig& config)
     : Broker(config, BrokerType::MONGO),
+      mongo_instance_(MongoInstance()),
       client_(mongocxx::uri(ConnectionString())),
       db_(client_[config_.dbname]),
       agents_(db_["agents"]),
       tasks_(db_["tasks"]),
       task_assignments_(db_["task_assignments"]),
-      counters_(db_["counters"]) {}
+      counters_(db_["counters"]) {
+    (void)mongo_instance_;
+}
 
 std::string MongoBroker::ConnectionString() const {
     return config_.host;

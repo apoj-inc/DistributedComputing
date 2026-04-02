@@ -4,6 +4,7 @@
 #include <mongocxx/v_noabi/mongocxx/client_session.hpp>
 #include <mongocxx/v_noabi/mongocxx/collection.hpp>
 #include <mongocxx/v_noabi/mongocxx/database.hpp>
+#include <mongocxx/v_noabi/mongocxx/instance.hpp>
 
 #include "broker.hpp"
 
@@ -48,6 +49,7 @@ protected:
 private:
     std::int64_t NextTaskId(mongocxx::client_session& session);
 
+    mongocxx::instance& mongo_instance_;
     mongocxx::client client_;
     mongocxx::database db_;
     mongocxx::collection agents_;

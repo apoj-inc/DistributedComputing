@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -11,6 +12,8 @@
 #if !defined(_WIN32)
 #include <sys/wait.h>
 #endif
+
+#include <mongocxx/v_noabi/mongocxx/exception/exception.hpp>
 
 #include "common/env.hpp"
 #include "common/logging.hpp"
@@ -103,6 +106,24 @@ bool ParseBoolEnvValue(const std::string& value) {
     return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
 }
 
+bool IsValidMongoUri(const std::string& uri) {
+    const std::string trimmed = TrimWhitespace(uri);
+    const std::string lower = ToLower(trimmed);
+    return lower.rfind("mongodb://", 0) == 0 || lower.rfind("mongodb+srv://", 0) == 0;
+}
+
+std::string RedactMongoUriForLogs(const std::string& uri) {
+    const auto scheme_pos = uri.find("://");
+    if (scheme_pos == std::string::npos) {
+        return "<invalid>";
+    }
+    const auto at_pos = uri.find('@', scheme_pos + 3);
+    if (at_pos == std::string::npos) {
+        return uri;
+    }
+    return uri.substr(0, scheme_pos + 3) + "<redacted>@" + uri.substr(at_pos + 1);
+}
+
 void PrintUsage() {
     std::cout << "Usage: dc_master [--env-file <path>]\n"
               << "Options:\n"
@@ -117,7 +138,7 @@ bool ParseArgs(int argc, char* argv[], MasterArgs* args, std::string* error) {
 
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
-        if (arg == "--help" || arg == "-hpp") {
+        if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return false;
         } else if (arg == "--env-file" || arg == "-e") {
@@ -300,6 +321,12 @@ int main(int argc, char* argv[]) {
             spdlog::critical("Missing MONGO_URI or MONGO_DB environment variable.");
             return 2;
         }
+        if (!IsValidMongoUri(db.host)) {
+            spdlog::critical(
+                "Invalid MONGO_URI '{}'. Expected URI starting with mongodb:// or mongodb+srv://.",
+                RedactMongoUriForLogs(db.host));
+            return 2;
+        }
     }
 
     // Ensure log root exists even if no task logs are present yet.
@@ -330,7 +357,19 @@ int main(int argc, char* argv[]) {
     LogStore log_store(config.log_dir);
     dc::broker::Broker* broker = nullptr;
     if (backend == "mongo") {
-        broker = new dc::broker::MongoBroker(db);
+        try {
+            broker = new dc::broker::MongoBroker(db);
+        } catch (const mongocxx::exception& ex) {
+            spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
+                             RedactMongoUriForLogs(db.host),
+                             ex.what());
+            return 2;
+        } catch (const std::exception& ex) {
+            spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
+                             RedactMongoUriForLogs(db.host),
+                             ex.what());
+            return 2;
+        }
     } else {
         broker = new dc::broker::PgBroker(db);
     }

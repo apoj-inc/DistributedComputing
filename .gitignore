@@ -1,4 +1,5 @@
 /build/
+/logs/
 /.vscode/
 /.venv/
 /.pytest_cache/
