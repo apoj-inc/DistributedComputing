@@ -48,6 +48,19 @@ protected:
 
 private:
     std::int64_t NextTaskId(mongocxx::client_session& session);
+    std::int64_t NextTaskId();
+    std::int64_t CreateTaskNoTransaction(const TaskInput& task);
+    std::optional<std::vector<TaskDispatch>> PollTasksForAgentNoTransaction(
+        const std::string& agent_id,
+        int free_slots);
+    bool UpdateTaskStatusNoTransaction(std::int64_t task_id,
+                                       TaskState state,
+                                       const std::optional<int>& exit_code,
+                                       const std::optional<std::string>& started_at,
+                                       const std::optional<std::string>& finished_at,
+                                       const std::optional<std::string>& error_message);
+    CancelTaskResult CancelTaskNoTransaction(std::int64_t task_id);
+    int MarkOfflineAgentsAndRequeueNoTransaction(int offline_after_sec);
 
     mongocxx::instance& mongo_instance_;
     mongocxx::client client_;
