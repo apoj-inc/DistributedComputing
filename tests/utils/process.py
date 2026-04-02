@@ -11,7 +11,7 @@ import requests
 
 
 def combined_output(stdout: str, stderr: str) -> str:
-    return f"{stdout}\n{stderr}".strip()
+    return f'{stdout}\n{stderr}'.strip()
 
 
 @dataclass
