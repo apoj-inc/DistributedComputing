@@ -17,7 +17,6 @@
 #include <mongocxx/v_noabi/mongocxx/instance.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/find.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/find_one_and_update.hpp>
-#include <mongocxx/v_noabi/mongocxx/options/index.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/update.hpp>
 
 #include "common/logging.hpp"
@@ -163,31 +162,10 @@ MongoBroker::MongoBroker(DbConfig& config)
       agents_(db_["agents"]),
       tasks_(db_["tasks"]),
       task_assignments_(db_["task_assignments"]),
-      counters_(db_["counters"]) {
-    EnsureIndexes();
-}
+      counters_(db_["counters"]) {}
 
 std::string MongoBroker::ConnectionString() const {
     return config_.host;
-}
-
-void MongoBroker::EnsureIndexes() {
-    mongocxx::options::index unique;
-    unique.unique(true);
-
-    agents_.create_index(make_document(kvp("agent_id", 1)), unique);
-    agents_.create_index(make_document(kvp("status", 1)));
-    agents_.create_index(make_document(kvp("last_heartbeat", 1)));
-
-    tasks_.create_index(make_document(kvp("task_id", 1)), unique);
-    tasks_.create_index(make_document(kvp("state", 1), kvp("created_at", -1)));
-    tasks_.create_index(make_document(kvp("assigned_agent", 1)));
-    tasks_.create_index(make_document(kvp("constraints_os", 1)));
-    tasks_.create_index(make_document(kvp("constraints_cpu_cores", 1)));
-    tasks_.create_index(make_document(kvp("constraints_ram_mb", 1)));
-
-    task_assignments_.create_index(make_document(kvp("task_id", 1), kvp("assigned_at", -1)));
-    task_assignments_.create_index(make_document(kvp("agent_id", 1), kvp("assigned_at", -1)));
 }
 
 std::int64_t MongoBroker::NextTaskId(mongocxx::client_session& session) {

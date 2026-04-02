@@ -104,5 +104,6 @@ Required variables for Mongo mode:
 
 Behavior notes:
 - `scripts/init_db.py` is used only for `DB_BACKEND=postgres`.
-- In Mongo mode, startup skips the Postgres init script.
+- In Mongo mode, startup runs `scripts/init_mongo.py` (or `INIT_MONGO_SCRIPT` override),
+  which executes `mongodb-migrations` from `migrations_broker_mongo`.
 - Collections used by Master: `agents`, `tasks`, `task_assignments`, `counters`.
