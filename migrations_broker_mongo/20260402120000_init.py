@@ -7,7 +7,7 @@ from mongodb_migrations.base import BaseMigration
 
 
 class Migration(BaseMigration):
-    def upgrade(self):
+    def upgrade(self) -> None:
         existing = set(self.db.list_collection_names())
         for name in ('agents', 'tasks', 'task_assignments', 'counters'):
             if name not in existing:
@@ -59,5 +59,5 @@ class Migration(BaseMigration):
             name='agent_id_1_assigned_at_-1',
         )
 
-    def downgrade(self):
+    def downgrade(self) -> None:
         raise RuntimeError('Downgrade is not supported for this migration.')

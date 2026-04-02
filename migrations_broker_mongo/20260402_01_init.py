@@ -6,8 +6,8 @@ from mongodb_migrations.base import BaseMigration
 
 
 class Migration(BaseMigration):
-    def upgrade(self):
+    def upgrade(self) -> None:
         return
 
-    def downgrade(self):
+    def downgrade(self) -> None:
         raise RuntimeError('Downgrade is not supported for this migration.')
