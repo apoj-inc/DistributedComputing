@@ -308,8 +308,8 @@ std::vector<AgentRecord> MongoBroker::ListAgents(const std::optional<AgentStatus
 
 std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
     auto session = client_.start_session();
-    session.start_transaction();
     try {
+        session.start_transaction();
         const std::int64_t task_id = NextTaskId(session);
         const auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
         const json constraints = NormalizeConstraints(task.constraints);
@@ -457,8 +457,8 @@ std::vector<TaskSummary> MongoBroker::ListTasks(const std::optional<TaskState>& 
 std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const std::string& agent_id,
                                                                          int free_slots) {
     auto session = client_.start_session();
-    session.start_transaction();
     try {
+        session.start_transaction();
         auto agent_result = agents_.find_one(session, make_document(kvp("agent_id", agent_id)));
         if (!agent_result) {
             session.abort_transaction();
@@ -687,8 +687,8 @@ bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
                                     const std::optional<std::string>& finished_at,
                                     const std::optional<std::string>& error_message) {
     auto session = client_.start_session();
-    session.start_transaction();
     try {
+        session.start_transaction();
         auto current_result = tasks_.find_one(session, make_document(kvp("task_id", task_id)));
         if (!current_result) {
             session.abort_transaction();
@@ -837,8 +837,8 @@ bool MongoBroker::UpdateTaskStatusNoTransaction(
 
 CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
     auto session = client_.start_session();
-    session.start_transaction();
     try {
+        session.start_transaction();
         auto current_result = tasks_.find_one(session, make_document(kvp("task_id", task_id)));
         if (!current_result) {
             session.abort_transaction();
@@ -934,8 +934,8 @@ CancelTaskResult MongoBroker::CancelTaskNoTransaction(std::int64_t task_id) {
 
 int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     auto session = client_.start_session();
-    session.start_transaction();
     try {
+        session.start_transaction();
         const auto cutoff = bsoncxx::types::b_date(
             std::chrono::system_clock::now() - std::chrono::seconds(offline_after_sec));
         auto candidates = agents_.find(
