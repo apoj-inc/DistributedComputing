@@ -35,13 +35,17 @@ def pick_value(cli_value, env, config, key, default=None):
     return default
 
 
-def build_command(binary, url, database, migrations, metastore):
+def build_command(binary, url, database, username, password, migrations, metastore):
     return [
         binary,
         "--url",
         url,
         "--database",
         database,
+        "--username",
+        username,
+        "--password",
+        password,
         "--migrations",
         migrations,
         "--metastore",
@@ -73,7 +77,7 @@ def main():
     db_port = pick_value(args.url, env, config, "DB_PORT")
     db_user = pick_value(args.url, env, config, "DB_USER")
     db_password = pick_value(args.url, env, config, "DB_PASSWORD")
-    mongo_url = f'mongodb://{db_user}:{db_password}@{db_host}:{db_port}'
+    mongo_url = f"mongodb://{db_user}:{db_password}@{db_host}:{db_port}/?authSource=admin"
     db_name = pick_value(args.database, env, config, "DB_NAME")
     migrations = pick_value(
         args.migrations,
@@ -103,7 +107,17 @@ def main():
         resolved = shutil.which(binary)
         if not resolved:
             continue
-        return run_command(build_command(resolved, mongo_url, db_name, migrations, metastore))
+        return run_command(
+            build_command(
+                resolved,
+                mongo_url,
+                db_name,
+                db_user,
+                db_password,
+                migrations,
+                metastore,
+            )
+        )
 
     print(
         "ERROR: mongodb-migrations executable not found. "

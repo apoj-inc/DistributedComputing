@@ -188,7 +188,12 @@ MongoBroker::MongoBroker(DbConfig& config)
 }
 
 std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const {
-    return std::format("mongodb://{}:{}@{}:{}", config.user, config.password, config.host, config.port);
+    return std::format(
+        "mongodb://{}:{}@{}:{}/?authSource=admin",
+        config.user,
+        config.password,
+        config.host,
+        config.port);
 }
 
 std::int64_t MongoBroker::NextTaskId(mongocxx::client_session& session) {

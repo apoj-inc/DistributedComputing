@@ -76,8 +76,8 @@ RUN chmod +x ./master
 COPY scripts/init_pg.py .
 COPY scripts/init_mongo.py .
 
-COPY migrations_broker_pg .
-COPY migrations_broker_mongo .
+COPY migrations_broker_pg migrations_broker_pg
+COPY migrations_broker_mongo migrations_broker_mongo
 
 ENTRYPOINT ["./master"]
 
