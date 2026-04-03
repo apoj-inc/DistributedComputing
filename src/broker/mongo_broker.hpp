@@ -18,6 +18,10 @@ public:
     bool UpsertAgent(const AgentInput& agent) override;
     bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) override;
 
+    std::string GenerateConnectionString(
+        const DbConfig& config
+    ) const override;
+
     std::optional<AgentRecord> GetAgent(const std::string& agent_id) override;
     std::vector<AgentRecord> ListAgents(const std::optional<AgentStatus>& status,
                                         int limit,
@@ -42,9 +46,6 @@ public:
 
     CancelTaskResult CancelTask(std::int64_t task_id) override;
     int MarkOfflineAgentsAndRequeue(int offline_after_sec) override;
-
-protected:
-    std::string ConnectionString() const override;
 
 private:
     std::int64_t NextTaskId(mongocxx::client_session& session);

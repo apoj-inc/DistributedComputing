@@ -4,6 +4,7 @@
 #include <cctype>
 #include <chrono>
 #include <ctime>
+#include <format>
 #include <iomanip>
 #include <optional>
 #include <sstream>
@@ -175,9 +176,9 @@ bool IsTransactionUnsupported(const mongocxx::exception& ex) {
 }  // namespace
 
 MongoBroker::MongoBroker(DbConfig& config)
-    : Broker(config, BrokerType::MONGO),
+    : Broker(config, BrokerType::MONGO, GenerateConnectionString(config)),
       mongo_instance_(MongoInstance()),
-      client_(mongocxx::uri(ConnectionString())),
+      client_(mongocxx::uri(connectionString_)),
       db_(client_[config_.dbname]),
       agents_(db_["agents"]),
       tasks_(db_["tasks"]),
@@ -186,8 +187,8 @@ MongoBroker::MongoBroker(DbConfig& config)
     (void)mongo_instance_;
 }
 
-std::string MongoBroker::ConnectionString() const {
-    return config_.host;
+std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const {
+    return std::format("mongodb://{}:{}@{}:{}", config.user, config.password, config.host, config.port);
 }
 
 std::int64_t MongoBroker::NextTaskId(mongocxx::client_session& session) {

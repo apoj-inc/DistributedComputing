@@ -69,8 +69,12 @@ def main():
     config_path = args.config or env.get("DB_CONFIG")
     config = parse_env_file(config_path) if config_path else {}
 
-    mongo_url = pick_value(args.url, env, config, "MONGO_URI")
-    mongo_db = pick_value(args.database, env, config, "MONGO_DB")
+    db_host = pick_value(args.url, env, config, "DB_HOST")
+    db_port = pick_value(args.url, env, config, "DB_PORT")
+    db_user = pick_value(args.url, env, config, "DB_USER")
+    db_password = pick_value(args.url, env, config, "DB_PASSWORD")
+    mongo_url = f'mongodb://{db_user}:{db_password}@{db_host}:{db_port}'
+    db_name = pick_value(args.database, env, config, "DB_NAME")
     migrations = pick_value(
         args.migrations,
         env,
@@ -87,9 +91,9 @@ def main():
     )
     explicit_binary = pick_value(args.binary, env, config, "MONGO_MIGRATIONS_BIN")
 
-    if not mongo_url or not mongo_db:
+    if not db_host or not db_port or not db_user or not db_password or not db_name:
         print(
-            "ERROR: missing required params: MONGO_URI and/or MONGO_DB",
+            "ERROR: missing required params: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME",
             file=sys.stderr,
         )
         return 2
@@ -103,7 +107,7 @@ def main():
         resolved = shutil.which(binary)
         if not resolved:
             continue
-        return run_command(build_command(resolved, mongo_url, mongo_db, migrations, metastore))
+        return run_command(build_command(resolved, mongo_url, db_name, migrations, metastore))
 
     print(
         "ERROR: mongodb-migrations executable not found. "

@@ -98,9 +98,13 @@ enum class BrokerType {
 
 class Broker {
 public:
-    explicit Broker(DbConfig& config, BrokerType brokerType): config_(config), broker_type_(brokerType){};
+    explicit Broker(DbConfig& config, BrokerType brokerType, std::string connectionString): config_(config), broker_type_(brokerType), connectionString_(connectionString){};
 
     virtual ~Broker() = default;
+
+    virtual std::string GenerateConnectionString(
+        const DbConfig& config
+    ) const = 0;
 
     virtual bool UpsertAgent(const AgentInput& agent) = 0;
     virtual bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) = 0;
@@ -137,8 +141,12 @@ public:
         return broker_type_;
     };
 
+    std::string GetConnectionString() const {
+        return connectionString_;
+    };
+
 protected:
-    virtual std::string ConnectionString() const = 0;
+    const std::string connectionString_;
 
     const BrokerType broker_type_;
     DbConfig config_;

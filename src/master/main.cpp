@@ -106,24 +106,6 @@ bool ParseBoolEnvValue(const std::string& value) {
     return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
 }
 
-bool IsValidMongoUri(const std::string& uri) {
-    const std::string trimmed = TrimWhitespace(uri);
-    const std::string lower = ToLower(trimmed);
-    return lower.rfind("mongodb://", 0) == 0 || lower.rfind("mongodb+srv://", 0) == 0;
-}
-
-std::string RedactMongoUriForLogs(const std::string& uri) {
-    const auto scheme_pos = uri.find("://");
-    if (scheme_pos == std::string::npos) {
-        return "<invalid>";
-    }
-    const auto at_pos = uri.find('@', scheme_pos + 3);
-    if (at_pos == std::string::npos) {
-        return uri;
-    }
-    return uri.substr(0, scheme_pos + 3) + "<redacted>@" + uri.substr(at_pos + 1);
-}
-
 void PrintUsage() {
     std::cout << "Usage: dc_master [--env-file <path>]\n"
               << "Options:\n"
@@ -315,16 +297,13 @@ int main(int argc, char* argv[]) {
             return 2;
         }
     } else {
-        db.host = dc::common::GetEnvOrDefault("MONGO_URI", "");
-        db.dbname = dc::common::GetEnvOrDefault("MONGO_DB", "");
-        if (db.host.empty() || db.dbname.empty()) {
-            spdlog::critical("Missing MONGO_URI or MONGO_DB environment variable.");
-            return 2;
-        }
-        if (!IsValidMongoUri(db.host)) {
-            spdlog::critical(
-                "Invalid MONGO_URI '{}'. Expected URI starting with mongodb:// or mongodb+srv://.",
-                RedactMongoUriForLogs(db.host));
+        db.host = dc::common::GetEnvOrDefault("DB_HOST", "127.0.0.1");
+        db.port = dc::common::GetEnvOrDefault("DB_PORT", "27017");
+        db.user = dc::common::GetEnvOrDefault("DB_USER", "");
+        db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
+        db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
+        if (db.host.empty() || db.port.empty() || db.user.empty() || db.password.empty() || db.dbname.empty()) {
+            spdlog::critical("Missing one of  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME environment variables.");
             return 2;
         }
     }
@@ -361,12 +340,12 @@ int main(int argc, char* argv[]) {
             broker = new dc::broker::MongoBroker(db);
         } catch (const mongocxx::exception& ex) {
             spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
-                             RedactMongoUriForLogs(db.host),
+                             broker->GetConnectionString(),
                              ex.what());
             return 2;
         } catch (const std::exception& ex) {
             spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
-                             RedactMongoUriForLogs(db.host),
+                             broker->GetConnectionString(),
                              ex.what());
             return 2;
         }

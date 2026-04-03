@@ -227,9 +227,12 @@ def master_api_base_url_mongo(
     env = os.environ.copy()
     env.update(
         {
-            "DB_BACKEND": "mongo",
-            "MONGO_URI": mongo_uri,
-            "MONGO_DB": "dc_test",
+            "DB_BACKEND" : "mongo",
+            'DB_HOST'    : mongo_uri.split('@')[1].split(':')[0],
+            'DB_PORT'    : mongo_uri.split(':')[-1],
+            'DB_USER'    : mongo_uri.split('//')[1].split(':')[0],
+            'DB_PASSWORD': mongo_uri.split('//')[1].split(':')[1].split('@')[0],
+            "DB_NAME"    : "dc_test",
             "MASTER_HOST": "127.0.0.1",
             "MASTER_PORT": str(port),
             "LOG_DIR": str(log_dir),
