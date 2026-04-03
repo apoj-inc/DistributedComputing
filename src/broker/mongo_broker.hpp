@@ -46,7 +46,6 @@ protected:
     std::string ConnectionString() const override;
 
 private:
-    void EnsureIndexes();
     std::int64_t NextTaskId(mongocxx::client_session& session);
 
     mongocxx::client client_;

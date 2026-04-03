@@ -16,7 +16,7 @@ C++ distributed computing system with Master, Worker, and CLI components.
 ## Dependencies
 - CMake 3.20+ and a C++20 compiler
 - PostgreSQL server
-- Python 3 with `psycopg2-binary` for `scripts/init_db.py`
+- Python 3 with `yoyo-migrations` and `mongodb-migrations` for DB migration scripts
 - Build prerequisites for FetchContent MongoDB C++ driver on Linux:
   `pkg-config`, `libssl-dev`, `libsasl2-dev`, `zlib1g-dev`
 
@@ -26,7 +26,7 @@ Place the header-only libraries into `third_party/`:
 - nlohmann/json: `third_party/nlohmann/json.hpp`
 
 ## Configuration
-Database (used by Master and `scripts/init_db.py`):
+Database (used by Master startup migration scripts):
 - `DB_BACKEND` (default: `postgres`; allowed: `postgres`, `mongo`)
 - `DB_HOST` (default: `localhost`)
 - `DB_PORT` (default: `5432`)
@@ -47,8 +47,14 @@ Master service:
 - `HEARTBEAT_SEC` (default: `30`)
 - `OFFLINE_SEC` (default: `120`)
 - `MAX_LOG_UPLOAD_BYTES` (default: `10485760`, limit на размер загружаемого лога от агента)
-- `INIT_DB_PYTHON` (optional python executable override for init_db)
-- `INIT_DB_SCRIPT` (optional path to DB init script, default: `scripts/init_db.py`)
+- `INIT_DB_PYTHON` (optional python executable override for Postgres migrations runner)
+- `INIT_DB_SCRIPT` (optional path to Postgres migrations script, default: `scripts/init_pg.py`)
+- `PG_MIGRATIONS_DIR` (optional Postgres migrations directory, default: `migrations_broker_pg`)
+- `INIT_MONGO_PYTHON` (optional python executable override for Mongo migrations)
+- `INIT_MONGO_SCRIPT` (optional path to Mongo migration script, default: `scripts/init_mongo.py`)
+- `MONGO_MIGRATIONS_DIR` (optional migrations directory, default: `migrations_broker_mongo`)
+- `MONGO_MIGRATIONS_METASTORE` (optional metastore collection, default: `database_migrations`)
+- `MONGO_MIGRATIONS_BIN` (optional override of `mongodb-migrate` executable path)
 
 Worker service:
 - `UPLOAD_LOGS` (default: `true`)
@@ -121,10 +127,10 @@ export DB_CONFIG=configs/db.env
 ./build/src/master/dc_master
 ```
 
-When `DB_BACKEND=postgres`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_db.py`).
-If schema differences are detected, the script prints
-diffs and Master exits with code `4`.
-When `DB_BACKEND=mongo`, this init script is skipped.
+When `DB_BACKEND=postgres`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_pg.py`)
+which applies `yoyo` migrations from `migrations_broker_pg`.
+When `DB_BACKEND=mongo`, the Master runs script from `INIT_MONGO_SCRIPT` (default: `scripts/init_mongo.py`)
+which executes `mongodb-migrations` over `migrations_broker_mongo`.
 
 ## Example env for Master
 Create a `.env` file (or reuse `configs/master.env`) and export it before запуском:

@@ -64,12 +64,11 @@
 - task_assignments.task_id -> tasks.task_id (ON DELETE CASCADE)
 - task_assignments.agent_id -> agents.agent_id
 
-## 7. Скрипт инициализации
-Скрипт `scripts/init_db.py` создаёт БД и схему (если БД отсутствует) либо проверяет соответствие схемы
-описанию и выводит различия.
+## 7. Миграции PostgreSQL
+Скрипт `scripts/init_pg.py` запускает `yoyo`-миграции из `migrations_broker_pg`.
 
 ### 7.1 Передача параметров
-Требуется установленный Python 3 и пакет `psycopg2-binary`.
+Требуется установленный Python 3 и пакет `yoyo-migrations`.
 Параметры берутся из переменных окружения или из файла конфигурации (формат `.env` с `KEY=VALUE`):
 - `DB_HOST` (по умолчанию `localhost`)
 - `DB_PORT` (по умолчанию `5432`)
@@ -78,6 +77,7 @@
 - `DB_NAME` (обязательно)
 - `DB_SSLMODE` (опционально)
 - `DB_CONFIG` (путь к файлу конфигурации)
+- `PG_MIGRATIONS_DIR` (опционально, путь к директории миграций)
 
 CLI-параметры `--host/--port/--user/--password/--dbname/--sslmode` имеют приоритет над окружением и конфигом.
 
@@ -92,7 +92,7 @@ DB_NAME=distributed
 
 Запуск:
 ```
-python3 scripts/init_db.py --config configs/db.env
+python3 scripts/init_pg.py --config configs/db.env
 ```
 
 ## 8. MongoDB backend
@@ -103,6 +103,7 @@ Required variables for Mongo mode:
 - `MONGO_DB` (database name)
 
 Behavior notes:
-- `scripts/init_db.py` is used only for `DB_BACKEND=postgres`.
-- In Mongo mode, startup skips the Postgres init script.
+- `scripts/init_pg.py` is used only for `DB_BACKEND=postgres`.
+- In Mongo mode, startup runs `scripts/init_mongo.py` (or `INIT_MONGO_SCRIPT` override),
+  which executes `mongodb-migrations` from `migrations_broker_mongo`.
 - Collections used by Master: `agents`, `tasks`, `task_assignments`, `counters`.

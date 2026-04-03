@@ -1,3 +1,5 @@
 pytest
 requests
 yoyo-migrations
+pymongo
+mongodb-migrations
