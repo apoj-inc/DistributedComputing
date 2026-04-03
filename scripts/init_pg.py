@@ -73,7 +73,7 @@ def main():
         args.migrations,
         env,
         config,
-        'PG_MIGRATIONS_DIR',
+        'MIGRATIONS_DIR',
         'migrations_broker_pg',
     )
 

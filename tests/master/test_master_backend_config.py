@@ -54,14 +54,14 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
     env['DB_USER'] = 'local'
     env['DB_PASSWORD'] = 'local'
     env['DB_NAME'] = 'dc_test'
-    env['INIT_MONGO_SCRIPT'] = str(mongo_script)
-    env['INIT_DB_SCRIPT'] = str(tmp_path / 'postgres_should_not_run.py')
+    env['INIT_DB_SCRIPT'] = str(mongo_script)
+    
     result = run_binary(dc_master_bin, env=env)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode == 73
-    assert 'mongo migration script invoked' in output
-    assert 'Mongo migrations failed with code 73' in output
+    assert 'mongo migration script invoked' in output, output
+    assert 'Migrations failed with code 73' in output, output
 
 
 @pytest.mark.integration
@@ -101,8 +101,8 @@ def test_master_runs_postgres_migration_script_on_postgres_backend(
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode == 74
-    assert 'postgres migration script invoked' in output
-    assert 'PostgreSQL migrations failed with code 74' in output
+    assert 'postgres migration script invoked' in output, output
+    assert 'Migrations failed with code 74' in output, output
 
 
 @pytest.mark.integration

@@ -180,41 +180,7 @@ int RunInitDbScript() {
             command += " --config \"" + config_path + "\"";
         }
 
-        spdlog::info("Running PostgreSQL migrations: {}", command);
-        int raw_code = std::system(command.c_str());
-        int code = NormalizeExitCode(raw_code);
-
-        if (IsCommandNotFound(code) && candidates.size() > 1) {
-            continue;
-        }
-        return code;
-    }
-
-    return 127;
-}
-
-int RunMongoMigrationsScript() {
-    const std::string config_path = dc::common::GetEnvOrDefault("DB_CONFIG", "");
-    const std::string preferred_python =
-        dc::common::GetEnvOrDefault("INIT_MONGO_PYTHON", "");
-    const std::string init_mongo_script =
-        dc::common::GetEnvOrDefault("INIT_MONGO_SCRIPT", "scripts/init_mongo.py");
-
-    std::vector<std::string> candidates;
-    if (!preferred_python.empty()) {
-        candidates.push_back(preferred_python);
-    } else {
-        candidates.push_back("python3");
-        candidates.push_back("python");
-    }
-
-    for (const auto& python_cmd : candidates) {
-        std::string command = python_cmd + " \"" + init_mongo_script + "\"";
-        if (!config_path.empty()) {
-            command += " --config \"" + config_path + "\"";
-        }
-
-        spdlog::info("Running Mongo migrations: {}", command);
+        spdlog::info("Running migrations: {}", command);
         int raw_code = std::system(command.c_str());
         int code = NormalizeExitCode(raw_code);
 
@@ -318,18 +284,12 @@ int main(int argc, char* argv[]) {
 
     if (skip_db_migration) {
         spdlog::warn("DB migration step skipped by MASTER_SKIP_DB_MIGRATION/SKIP_DB_MIGRATION.");
-    } else if (backend == "postgres") {
-        // Run Postgres migrations before broker startup.
+    } else {
+        // Run migrations before broker startup.
         int init_code = RunInitDbScript();
         if (init_code != 0) {
-            spdlog::critical("PostgreSQL migrations failed with code {}", init_code);
+            spdlog::critical("Migrations failed with code {}", init_code);
             return init_code;
-        }
-    } else {
-        int migrate_code = RunMongoMigrationsScript();
-        if (migrate_code != 0) {
-            spdlog::critical("Mongo migrations failed with code {}", migrate_code);
-            return migrate_code;
         }
     }
 

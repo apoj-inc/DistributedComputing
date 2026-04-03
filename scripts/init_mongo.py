@@ -79,7 +79,7 @@ def main():
         args.migrations,
         env,
         config,
-        "MONGO_MIGRATIONS_DIR",
+        "MIGRATIONS_DIR",
         "migrations_broker_mongo",
     )
     metastore = pick_value(
@@ -89,7 +89,6 @@ def main():
         "MONGO_MIGRATIONS_METASTORE",
         "database_migrations",
     )
-    explicit_binary = pick_value(args.binary, env, config, "MONGO_MIGRATIONS_BIN")
 
     if not db_host or not db_port or not db_user or not db_password or not db_name:
         print(
@@ -98,10 +97,7 @@ def main():
         )
         return 2
 
-    if explicit_binary:
-        binaries = [explicit_binary]
-    else:
-        binaries = ["mongodb-migrate", "mongodb-migrations"]
+    binaries = ["mongodb-migrate", "mongodb-migrations"]
 
     for binary in binaries:
         resolved = shutil.which(binary)

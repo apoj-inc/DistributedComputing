@@ -35,8 +35,6 @@ Database (used by Master startup migration scripts):
 - `DB_NAME` (required)
 - `DB_SSLMODE` (optional)
 - `DB_CONFIG` (optional path to `.env` file; e.g. `configs/db.env`)
-- `MONGO_URI` (required when `DB_BACKEND=mongo`; e.g. `mongodb://127.0.0.1:27017`)
-- `MONGO_DB` (required when `DB_BACKEND=mongo`)
 
 Master service:
 - `MASTER_HOST` (default: `0.0.0.0`)
@@ -48,15 +46,11 @@ Master service:
 - `OFFLINE_SEC` (default: `120`)
 - `MAX_LOG_UPLOAD_BYTES` (default: `10485760`, limit на размер загружаемого лога от агента)
 - `INIT_DB_PYTHON` (optional python executable override for Postgres migrations runner)
-- `INIT_DB_SCRIPT` (optional path to Postgres migrations script, default: `scripts/init_pg.py`)
-- `PG_MIGRATIONS_DIR` (optional Postgres migrations directory, default: `migrations_broker_pg`)
-- `INIT_MONGO_PYTHON` (optional python executable override for Mongo migrations)
-- `INIT_MONGO_SCRIPT` (optional path to Mongo migration script, default: `scripts/init_mongo.py`)
-- `MONGO_MIGRATIONS_DIR` (optional migrations directory, default: `migrations_broker_mongo`)
+- `INIT_DB_SCRIPT` (optional path to Postgres migrations script, default: Postgres: `scripts/init_pg.py`MongoDB: `scripts/init_mongo.py`)
+- `MIGRATIONS_DIR` (optional, migrations directory default: Postgres: `migrations_broker_pg`, MongoDB: `migrations_broker_mongo`)
 - `MONGO_MIGRATIONS_METASTORE` (optional metastore collection, default: `database_migrations`)
 - `MASTER_SKIP_DB_MIGRATION` (optional bool; when true, skips DB migration scripts before startup)
   Alias: `SKIP_DB_MIGRATION`
-- `MONGO_MIGRATIONS_BIN` (optional override of `mongodb-migrate` executable path)
 
 Worker service:
 - `UPLOAD_LOGS` (default: `true`)
@@ -131,7 +125,7 @@ export DB_CONFIG=configs/db.env
 
 When `DB_BACKEND=postgres`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_pg.py`)
 which applies `yoyo` migrations from `migrations_broker_pg`.
-When `DB_BACKEND=mongo`, the Master runs script from `INIT_MONGO_SCRIPT` (default: `scripts/init_mongo.py`)
+When `DB_BACKEND=mongo`, the Master runs script from `INIT_DB_SCRIPT` (default: `scripts/init_mongo.py`)
 which executes `mongodb-migrations` over `migrations_broker_mongo`.
 Set `MASTER_SKIP_DB_MIGRATION=1` (or `SKIP_DB_MIGRATION=1`) to skip these migration scripts.
 
