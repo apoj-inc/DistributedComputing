@@ -7,6 +7,8 @@ from typing import Callable
 
 import pytest
 
+from tests.utils.process import combined_output
+
 
 def _repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parent.parent
@@ -73,3 +75,50 @@ def run_binary() -> Callable[..., subprocess.CompletedProcess[str]]:
         )
 
     return _run_binary
+
+
+@pytest.fixture(scope='session')
+def docker_available() -> None:
+    result = subprocess.run(
+        ['docker', 'info'],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip(
+            'Docker daemon is unavailable for smoke tests.\n'
+            f'output:\n{combined_output(result.stdout, result.stderr)}'
+        )
+
+
+@pytest.fixture(scope='session')
+def docker_tag_prefix() -> str:
+    run_id = os.getenv('GITHUB_RUN_ID', 'local')
+    run_attempt = os.getenv('GITHUB_RUN_ATTEMPT', '0')
+    return f'dc-smoke-{run_id}-{run_attempt}'
+
+
+@pytest.fixture(scope='session')
+def run_command() -> Callable[..., subprocess.CompletedProcess[str]]:
+    def _run_command(
+        *args: str,
+        timeout: int = 120,
+        env: dict[str, str] | None = None,
+        cwd: pathlib.Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        process_env = os.environ.copy()
+        if env:
+            process_env.update(env)
+        return subprocess.run(
+            [*args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=process_env,
+            cwd=str(cwd) if cwd else None,
+        )
+
+    return _run_command
