@@ -1,6 +1,6 @@
 version: '3.0'
 services:
-  postgres:
+  postgres-events:
     image: postgres:18.3-alpine3.23
     restart: always
     environment:
@@ -9,7 +9,7 @@ services:
       - POSTGRES_DB=${PGDATABASE}
       - POSTGRES_ADMIN_PASSWORD=${PGPASSWORD}
     networks:
-      - backend
+      - backend_pg
   mongo-event:
     image: mongo:8.0 
     container_name: mongodb
@@ -20,9 +20,17 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MGUSER}     # Set the admin username
       MONGO_INITDB_ROOT_PASSWORD: ${MGPASSWORD} # Set the admin password
     networks:
-      - backend
+      - backend_mg
 networks:
-  backend: {}
-  frontend: {}
+  backend_pg: {
+    "default-address-pools":[
+    {"base":"10.66.0.0/16","size":24}
+    ]
+  }
+  backend_mg: {
+    "default-address-pools":[
+    {"base":"10.77.0.0/16","size":24}
+    ]
+  }
 
 

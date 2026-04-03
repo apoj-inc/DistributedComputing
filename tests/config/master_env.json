@@ -4,7 +4,7 @@
     "DB_USER": "POSTGRES",
     "DB_PASSWORD": "IAMTHEPASSWORD",
     "DB_NAME": "EVENTBASEDDB",
-    "DB_SSLMODE": false,
+    "PG_SSLMODE": false,
     "MASTER_HOST": "127.0.0.1",
     "MASTER_PORT": 1789,
     "LOG_DIR": "Testing/log",

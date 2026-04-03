@@ -33,7 +33,7 @@ Database (used by Master startup migration scripts):
 - `DB_USER` (required)
 - `DB_PASSWORD` (optional)
 - `DB_NAME` (required)
-- `DB_SSLMODE` (optional)
+- `PG_SSLMODE` (optional)
 - `DB_CONFIG` (optional path to `.env` file; e.g. `configs/db.env`)
 
 Master service:
@@ -137,7 +137,7 @@ DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=secret
 DB_NAME=distributed
-DB_SSLMODE=disable
+PG_SSLMODE=disable
 DB_BACKEND=postgres
 
 MASTER_HOST=0.0.0.0

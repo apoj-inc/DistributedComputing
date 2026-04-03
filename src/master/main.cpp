@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
         db.user = dc::common::GetEnvOrDefault("DB_USER", "");
         db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
         db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
-        db.sslmode = dc::common::GetEnvOrDefault("DB_SSLMODE", "");
+        db.sslmode = dc::common::GetEnvOrDefault("PG_SSLMODE", "");
 
         if (db.user.empty() || db.dbname.empty()) {
             spdlog::critical("Missing DB_USER or DB_NAME environment variable.");
