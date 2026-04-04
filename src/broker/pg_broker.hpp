@@ -10,6 +10,10 @@ class PgBroker final : public Broker {
 public:
     explicit PgBroker(DbConfig& config);   // constructor
 
+    std::string GenerateConnectionString(
+        const DbConfig& config
+    ) const override;
+
     bool UpsertAgent(const AgentInput& agent) override;
     bool UpdateHeartbeat(const AgentHeartbeat& heartbeat) override;
     std::optional<AgentRecord> GetAgent(const std::string& agent_id) override;
@@ -30,9 +34,6 @@ public:
                           const std::optional<std::string>& error_message) override;
     CancelTaskResult CancelTask(std::int64_t task_id) override;
     int MarkOfflineAgentsAndRequeue(int offline_after_sec) override;
-
-protected:
-    std::string ConnectionString() const override;
 };
 }  // namespace broker
 }  // namespace dc

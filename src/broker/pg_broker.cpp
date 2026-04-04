@@ -54,33 +54,35 @@ json BuildConstraintsFromRow(const pqxx::row& row) {
 
 }  // namespace
 
-PgBroker::PgBroker(DbConfig& config) : Broker(config, BrokerType::PGSQL) {}
+PgBroker::PgBroker(DbConfig& config) : Broker(config, BrokerType::PGSQL, GenerateConnectionString(config)) {}
 
-std::string PgBroker::ConnectionString() const {
+std::string PgBroker::GenerateConnectionString(
+        const DbConfig& config
+    ) const {
     std::ostringstream out;
-    if (!config_.host.empty()) {
-        out << "host=" << config_.host << " ";
+    if (!config.host.empty()) {
+        out << "host=" << config.host << " ";
     }
-    if (!config_.port.empty()) {
-        out << "port=" << config_.port << " ";
+    if (!config.port.empty()) {
+        out << "port=" << config.port << " ";
     }
-    if (!config_.user.empty()) {
-        out << "user=" << config_.user << " ";
+    if (!config.user.empty()) {
+        out << "user=" << config.user << " ";
     }
-    if (!config_.password.empty()) {
-        out << "password=" << config_.password << " ";
+    if (!config.password.empty()) {
+        out << "password=" << config.password << " ";
     }
-    if (!config_.dbname.empty()) {
-        out << "dbname=" << config_.dbname << " ";
+    if (!config.dbname.empty()) {
+        out << "dbname=" << config.dbname << " ";
     }
-    if (!config_.sslmode.empty()) {
-        out << "sslmode=" << config_.sslmode << " ";
+    if (!config.sslmode.empty()) {
+        out << "sslmode=" << config.sslmode << " ";
     }
     return out.str();
-}
+    }
 
 bool PgBroker::UpsertAgent(const AgentInput& agent) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
     tx.exec_params(
         "INSERT INTO agents (agent_id, os, version, resources_cpu_cores, resources_ram_mb, "
@@ -105,7 +107,7 @@ bool PgBroker::UpsertAgent(const AgentInput& agent) {
 }
 
 bool PgBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
     auto result = tx.exec_params(
         "UPDATE agents SET status = $1, last_heartbeat = NOW() WHERE agent_id = $2",
@@ -119,7 +121,7 @@ bool PgBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
 }
 
 std::optional<AgentRecord> PgBroker::GetAgent(const std::string& agent_id) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
     auto result = tx.exec_params(
         "SELECT agent_id, os, version, resources_cpu_cores, resources_ram_mb, "
@@ -147,7 +149,7 @@ std::optional<AgentRecord> PgBroker::GetAgent(const std::string& agent_id) {
 std::vector<AgentRecord> PgBroker::ListAgents(const std::optional<AgentStatus>& status,
                                              int limit,
                                              int offset) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
     std::string db_status;
     const char* status_param = nullptr;
@@ -186,7 +188,7 @@ std::vector<AgentRecord> PgBroker::ListAgents(const std::optional<AgentStatus>& 
 }
 
 std::int64_t PgBroker::CreateTask(const TaskInput& task) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     std::string args_json = task.args.is_null() ? "[]" : task.args.dump();
@@ -221,7 +223,7 @@ std::int64_t PgBroker::CreateTask(const TaskInput& task) {
 }
 
 std::optional<TaskRecord> PgBroker::GetTask(std::int64_t task_id) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
     auto result = tx.exec_params(
         "SELECT t.task_id, t.state::text, t.command, t.args::text, t.env::text, "
@@ -275,7 +277,7 @@ std::vector<TaskSummary> PgBroker::ListTasks(const std::optional<TaskState>& sta
                                             const std::optional<std::string>& agent_id,
                                             int limit,
                                             int offset) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     std::string db_state;
@@ -310,7 +312,7 @@ std::vector<TaskSummary> PgBroker::ListTasks(const std::optional<TaskState>& sta
 std::optional<std::vector<TaskDispatch>> PgBroker::PollTasksForAgent(
     const std::string& agent_id,
     int free_slots) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     auto agent_result = tx.exec_params(
@@ -403,7 +405,7 @@ bool PgBroker::UpdateTaskStatus(std::int64_t task_id,
                                const std::optional<std::string>& started_at,
                                const std::optional<std::string>& finished_at,
                                const std::optional<std::string>& error_message) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     std::string db_state = TaskStateToDb(state);
@@ -483,7 +485,7 @@ bool PgBroker::UpdateTaskStatus(std::int64_t task_id,
 }
 
 CancelTaskResult PgBroker::CancelTask(std::int64_t task_id) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     auto result = tx.exec_params(
@@ -518,7 +520,7 @@ CancelTaskResult PgBroker::CancelTask(std::int64_t task_id) {
 }
 
 int PgBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
-    pqxx::connection conn(ConnectionString());
+    pqxx::connection conn(connectionString_);
     pqxx::work tx(conn);
 
     // Agents past the heartbeat threshold are marked offline, and their tasks are requeued.

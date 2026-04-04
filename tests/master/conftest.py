@@ -182,7 +182,7 @@ def master_api_base_url(
             'MASTER_LOG_FILE': str(log_dir / 'master.log'),
             'INIT_DB_PYTHON': migration_python,
             'INIT_DB_SCRIPT': str(repo_root / 'scripts' / 'init_pg.py'),
-            'PG_MIGRATIONS_DIR': str(repo_root / 'migrations_broker_pg'),
+            'MIGRATIONS_DIR': str(repo_root / 'migrations_broker_pg'),
             'MASTER_SKIP_DB_MIGRATION': 'false',
         }
     )
@@ -215,7 +215,6 @@ def master_api_base_url_mongo(
     port = _free_port()
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     migration_python = _venv_python(repo_root)
-    migration_bin = _venv_binary(repo_root, "mongodb-migrate")
     log_dir = repo_root / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     mongo_uri = str(mongo_container.get_connection_url())
@@ -227,17 +226,19 @@ def master_api_base_url_mongo(
     env = os.environ.copy()
     env.update(
         {
-            "DB_BACKEND": "mongo",
-            "MONGO_URI": mongo_uri,
-            "MONGO_DB": "dc_test",
+            "DB_BACKEND" : "mongo",
+            'DB_HOST'    : mongo_uri.split('@')[1].split(':')[0],
+            'DB_PORT'    : mongo_uri.split(':')[-1],
+            'DB_USER'    : mongo_uri.split('//')[1].split(':')[0],
+            'DB_PASSWORD': mongo_uri.split('//')[1].split(':')[1].split('@')[0],
+            "DB_NAME"    : "dc_test",
             "MASTER_HOST": "127.0.0.1",
             "MASTER_PORT": str(port),
             "LOG_DIR": str(log_dir),
             "MASTER_LOG_FILE": str(log_dir / "master.log"),
             "INIT_MONGO_PYTHON": migration_python,
-            "INIT_MONGO_SCRIPT": str(repo_root / "scripts" / "init_mongo.py"),
-            "MONGO_MIGRATIONS_DIR": str(repo_root / "migrations_broker_mongo"),
-            "MONGO_MIGRATIONS_BIN": migration_bin,
+            "INIT_DB_SCRIPT": str(repo_root / "scripts" / "init_mongo.py"),
+            "MIGRATIONS_DIR": str(repo_root / "migrations_broker_mongo"),
             "MONGODB_MIGRATIONS_CONFIG": str(migration_config),
             "MASTER_SKIP_DB_MIGRATION": "false",
         }

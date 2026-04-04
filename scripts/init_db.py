@@ -658,7 +658,7 @@ def main():
         'user': pick_value(args.user, env, config, 'DB_USER'),
         'password': pick_value(args.password, env, config, 'DB_PASSWORD', ''),
         'dbname': pick_value(args.dbname, env, config, 'DB_NAME'),
-        'sslmode': pick_value(args.sslmode, env, config, 'DB_SSLMODE'),
+        'sslmode': pick_value(args.sslmode, env, config, 'PG_SSLMODE'),
     }
 
     missing = [k for k in ('user', 'dbname') if not params[k]]

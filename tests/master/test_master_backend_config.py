@@ -23,26 +23,16 @@ def test_master_rejects_unknown_db_backend(dc_master_bin, run_binary) -> None:
 def test_master_mongo_backend_requires_connection_env(dc_master_bin, run_binary) -> None:
     env = os.environ.copy()
     env['DB_BACKEND'] = 'mongo'
-    env.pop('MONGO_URI', None)
-    env.pop('MONGO_DB', None)
+    env.pop('DB_HOST', None)
+    env.pop('DB_PORT', None)
+    env.pop('DB_USER', None)
+    env.pop('DB_PASSWORD', None)
+    env.pop('DB_NAME', None)
     result = run_binary(dc_master_bin, env=env)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode != 0
-    assert 'Missing MONGO_URI or MONGO_DB' in output
-
-
-@pytest.mark.integration
-def test_master_mongo_backend_rejects_malformed_uri(dc_master_bin, run_binary) -> None:
-    env = os.environ.copy()
-    env['DB_BACKEND'] = 'mongo'
-    env['MONGO_URI'] = 'localhost:27017'
-    env['MONGO_DB'] = 'dc_test'
-    result = run_binary(dc_master_bin, env=env)
-    output = combined_output(result.stdout, result.stderr)
-
-    assert result.returncode != 0
-    assert "Invalid MONGO_URI" in output
+    assert 'Missing one of  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME environment variables.' in output
 
 
 @pytest.mark.integration
@@ -59,16 +49,19 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
 
     env = os.environ.copy()
     env['DB_BACKEND'] = 'mongo'
-    env['MONGO_URI'] = 'mongodb://127.0.0.1:27017'
-    env['MONGO_DB'] = 'dc_test'
-    env['INIT_MONGO_SCRIPT'] = str(mongo_script)
-    env['INIT_DB_SCRIPT'] = str(tmp_path / 'postgres_should_not_run.py')
+    env['DB_HOST'] = '127.0.0.1'
+    env['DB_PORT'] = '27017'
+    env['DB_USER'] = 'local'
+    env['DB_PASSWORD'] = 'local'
+    env['DB_NAME'] = 'dc_test'
+    env['INIT_DB_SCRIPT'] = str(mongo_script)
+    
     result = run_binary(dc_master_bin, env=env)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode == 73
-    assert 'mongo migration script invoked' in output
-    assert 'Mongo migrations failed with code 73' in output
+    assert 'mongo migration script invoked' in output, output
+    assert 'Migrations failed with code 73' in output, output
 
 
 @pytest.mark.integration
@@ -108,8 +101,8 @@ def test_master_runs_postgres_migration_script_on_postgres_backend(
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode == 74
-    assert 'postgres migration script invoked' in output
-    assert 'PostgreSQL migrations failed with code 74' in output
+    assert 'postgres migration script invoked' in output, output
+    assert 'Migrations failed with code 74' in output, output
 
 
 @pytest.mark.integration
