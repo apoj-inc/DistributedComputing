@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+    contents: write
+
+jobs:
+  build-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install MongoDB C++ driver deps
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev libsasl2-dev zlib1g-dev
+
+    - name: Configure CMake
+      run: cmake --preset x86_64-linux -S ${{github.workspace}} -B ${{github.workspace}}/build/x86_64-linux -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G Ninja
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build/x86_64-linux  --config ${{env.BUILD_TYPE}}
+
+    - name: Prepare build for artifact
+      shell: bash
+      run: tar -czf build-x86_64.tar.gz build
+    
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cmake-build-x86_64
+        path: build-x86_64.tar.gz
+    
+  build-arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install MongoDB C++ driver deps
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev libsasl2-dev zlib1g-dev
+
+    - name: Configure CMake
+      run: cmake --preset arm-linux -S ${{github.workspace}} -B ${{github.workspace}}/build/arm-linux -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G Ninja
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build/arm-linux  --config ${{env.BUILD_TYPE}}
+
+    - name: Prepare build for artifact
+      shell: bash
+      run: tar -czf build-x86_64.tar.gz build
+    
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cmake-build-arm
+        path: build-arm.tar.gz
+
+  release:
+    needs: [build-x86_64, build-arm]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download x86_64
+      uses: actions/download-artifact@v4
+      with:
+        name: cmake-build-x86_64
+        path: ${{ runner.temp }}
+
+    - name: Unpack x86_64 for release
+      shell: bash
+      run: tar -xzf ${{ runner.temp }}/build-x86_64.tar.gz -C ${{ runner.temp }}
+    
+    - name: Rearrange executables x86_64
+      shell: bash
+      run: |
+        mkdir ${{ runner.temp }}/x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/worker/dc_worker ${{ runner.temp }}/x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/master/dc_master ${{ runner.temp }}/x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/cli/dc_cli ${{ runner.temp }}/x86_64
+
+    - name: Download arm
+      uses: actions/download-artifact@v4
+      with:
+        name: cmake-build-arm
+        path: ${{ runner.temp }}
+
+    - name: Unpack arm for release
+      shell: bash
+      run: tar -xzf ${{ runner.temp }}/build-arm.tar.gz -C ${{ runner.temp }}
+    
+    - name: Rearrange executables arm
+      shell: bash
+      run: |
+        mkdir ${{ runner.temp }}/arm
+        cp ${{ runner.temp }}/build/arm-linux/src/worker/dc_worker ${{ runner.temp }}/arm
+        cp ${{ runner.temp }}/build/arm-linux/src/master/dc_master ${{ runner.temp }}/arm
+        cp ${{ runner.temp }}/build/arm-linux/src/cli/dc_cli ${{ runner.temp }}/arm
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        name: "DistributedComputing ${{ github.event.inputs.version }}"
+        body: |
+            ## DistributedComputing ${{ github.event.inputs.version }}
+        files: |
+            ${{ runner.temp }}/x86_64
+            ${{ runner.temp }}/arm
+        draft: false
+        prerelease: false
+    env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
