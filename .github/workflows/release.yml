@@ -71,9 +71,185 @@ jobs:
       with:
         name: cmake-build-arm
         path: build-arm.tar.gz
+  
+  build-docker-x86_64:
+    runs-on: ubuntu-latest
+    needs: build-x86_64
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download cmake builded
+      uses: actions/download-artifact@v4
+      with:
+        name: cmake-build-x86_64
+        path: ${{github.workspace}}
+
+    - name: Unpack cmake for docker
+      shell: bash
+      run: |
+       tar -xzf ${{github.workspace}}/build-x86_64.tar.gz -C ${{github.workspace}}
+       mkdir bin
+       cp build/x86_64-linux/src/master/dc_master bin
+       cp build/x86_64-linux/src/worker/dc_worker bin
+       cp build/x86_64-linux/src/cli/dc_cli bin
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Extract SHA
+      id: meta
+      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      
+    - name: Build and push amd64 production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/amd64
+        target: master
+        tags: |
+          dc_master:latest
+          dc_master:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_master-x86_64.tar
+    
+    - name: Build and push amd64 production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/amd64
+        target: worker
+        tags: |
+          dc_worker:latest
+          dc_worker:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_worker-x86_64.tar
+
+    - name: Build and push amd64 production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/amd64
+        target: cli
+        tags: |
+          dc_cli:latest
+          dc_cli:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_cli-x86_64.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_master-x86_64
+        path: ${{ runner.temp }}/dc_master-x86_64.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_worker-x86_64
+        path: ${{ runner.temp }}/dc_worker-x86_64.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_cli-x86_64
+        path: ${{ runner.temp }}/dc_cli-x86_64.tar
+  
+  build-docker-arm:
+    runs-on: ubuntu-latest
+    needs: build-arm
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download cmake builded
+      uses: actions/download-artifact@v4
+      with:
+        name: cmake-build-arm
+        path: ${{github.workspace}}
+
+    - name: Unpack cmake for docker
+      shell: bash
+      run: |
+       tar -xzf ${{github.workspace}}/build-arm.tar.gz -C ${{github.workspace}}
+       mkdir bin
+       cp build/arm-linux/src/master/dc_master bin
+       cp build/arm-linux/src/worker/dc_worker bin
+       cp build/arm-linux/src/cli/dc_cli bin
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Extract SHA
+      id: meta
+      run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      
+    - name: Build and push arm production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/arm
+        target: master
+        tags: |
+          dc_master:latest
+          dc_master:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_master-arm.tar
+    
+    - name: Build and push arm production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/arm
+        target: worker
+        tags: |
+          dc_worker:latest
+          dc_worker:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_worker-arm.tar
+
+    - name: Build and push arm production image
+      uses: docker/build-push-action@v6
+      with:
+        context: "${{github.workspace}}"
+        platforms: linux/arm
+        target: cli
+        tags: |
+          dc_cli:latest
+          dc_cli:${{ steps.meta.outputs.SHORT_SHA }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        push: false
+        outputs: type=docker,dest=${{ runner.temp }}/dc_cli-arm.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_master-arm
+        path: ${{ runner.temp }}/dc_master-arm.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_worker-arm
+        path: ${{ runner.temp }}/dc_worker-arm.tar
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dc_cli-arm
+        path: ${{ runner.temp }}/dc_cli-arm.tar
 
   release:
-    needs: [build-x86_64, build-arm]
+    needs: [build-x86_64, build-arm, build-docker-x86_64, build-docker-arm]
     runs-on: ubuntu-latest
     steps:
     - name: Download x86_64
@@ -90,9 +266,9 @@ jobs:
       shell: bash
       run: |
         mkdir ${{ runner.temp }}/x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/worker/dc_worker ${{ runner.temp }}/dc_worker_x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/master/dc_master ${{ runner.temp }}/dc_master_x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/cli/dc_cli ${{ runner.temp }}/dc_cli_x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/worker/dc_worker ${{ runner.temp }}/dc_worker-x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/master/dc_master ${{ runner.temp }}/dc_master-x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/cli/dc_cli ${{ runner.temp }}/dc_cli-x86_64
 
     - name: Download arm
       uses: actions/download-artifact@v4
@@ -111,6 +287,42 @@ jobs:
         cp ${{ runner.temp }}/build/arm-linux/src/worker/dc_worker ${{ runner.temp }}/dc_worker_arm
         cp ${{ runner.temp }}/build/arm-linux/src/master/dc_master ${{ runner.temp }}/dc_master_arm
         cp ${{ runner.temp }}/build/arm-linux/src/cli/dc_cli ${{ runner.temp }}/dc_cli_arm
+
+    - name: Download docker x86_64 master
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_master-x86_64
+        path: ${{ runner.temp }}
+
+    - name: Download docker x86_64 worker
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_worker-x86_64
+        path: ${{ runner.temp }}
+
+    - name: Download docker x86_64 cli
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_cli-x86_64
+        path: ${{ runner.temp }}
+
+    - name: Download docker arm master
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_master-arm
+        path: ${{ runner.temp }}
+
+    - name: Download docker arm worker
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_worker-arm
+        path: ${{ runner.temp }}
+
+    - name: Download docker arm cli
+      uses: actions/download-artifact@v4
+      with:
+        name: dc_cli-arm
+        path: ${{ runner.temp }}
 
     - name: Create Release
       uses: softprops/action-gh-release@v2

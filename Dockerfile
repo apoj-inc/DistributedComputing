@@ -17,7 +17,7 @@ ENV WORKER_LOG_LEVEL=info
 ENV WORKER_LOG_FILE=logs/worker/worker.log
 WORKDIR $MAIN
 
-COPY build/x86_64-linux/src/worker/dc_worker ./worker
+COPY bin/dc_worker ./worker
 RUN chmod +x ./worker
 
 ENTRYPOINT ["./worker"]
@@ -70,7 +70,7 @@ COPY src/master/requirements.txt requirements.txt
 RUN python3 -m venv "${VIRTUAL_ENV}" \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY build/x86_64-linux/src/master/dc_master ./master
+COPY bin/dc_master ./master
 RUN chmod +x ./master
 
 COPY scripts/init_pg.py .
@@ -88,7 +88,7 @@ ENV MASTER_HOST=127.0.0.1
 ENV MASTER_PORT=8080
 WORKDIR $MAIN
 
-COPY build/x86_64-linux/src/cli/dc_cli ./cli
+COPY bin/dc_cli ./cli
 RUN chmod +x ./cli
 
 ENTRYPOINT ["./cli"]
