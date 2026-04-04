@@ -25,31 +25,31 @@ def _free_port() -> int:
 
 
 def _venv_python(repo_root: pathlib.Path) -> str:
-    if sys.platform == "win32":
-        candidate = repo_root / ".venv" / "Scripts" / "python.exe"
+    if sys.platform == 'win32':
+        candidate = repo_root / '.venv' / 'Scripts' / 'python.exe'
     else:
-        candidate = repo_root / ".venv" / "bin" / "python3"
+        candidate = repo_root / '.venv' / 'bin' / 'python3'
     if not candidate.is_file():
         pytest.fail(
-            f"Expected tests to use .venv Python, but it was not found: {candidate}",
+            f'Expected tests to use .venv Python, but it was not found: {candidate}',
             pytrace=False,
         )
     return str(candidate)
 
 
 def _slug(text: str) -> str:
-    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in text)
-    return cleaned or "test"
+    cleaned = ''.join(ch if ch.isalnum() or ch in {'-', '_', '.'} else '_' for ch in text)
+    return cleaned or 'test'
 
 
 def _venv_binary(repo_root: pathlib.Path, name: str) -> str:
-    if sys.platform == "win32":
-        candidate = repo_root / ".venv" / "Scripts" / f"{name}.exe"
+    if sys.platform == 'win32':
+        candidate = repo_root / '.venv' / 'Scripts' / f'{name}.exe'
     else:
-        candidate = repo_root / ".venv" / "bin" / name
+        candidate = repo_root / '.venv' / 'bin' / name
     if not candidate.is_file():
         pytest.fail(
-            f"Expected tests to use .venv binary, but it was not found: {candidate}",
+            f'Expected tests to use .venv binary, but it was not found: {candidate}',
             pytrace=False,
         )
     return str(candidate)
@@ -60,20 +60,20 @@ def _write_mongo_migrations_config(
     username: str,
     password: str,
 ) -> pathlib.Path:
-    logs_dir = repo_root / "logs" / "mongo"
+    logs_dir = repo_root / 'logs' / 'mongo'
     logs_dir.mkdir(parents=True, exist_ok=True)
-    config_path = logs_dir / "mongodb-migrations.ini"
+    config_path = logs_dir / 'mongodb-migrations.ini'
     config_path.write_text(
-        "[mongo]\n"
-        "host=127.0.0.1\n"
-        "port=27017\n"
-        "database=dc_test\n"
-        "migrations=migrations_broker_mongo\n"
-        "metastore=database_migrations\n"
-        "dry_run=false\n"
-        f"username={username}\n"
-        f"password={password}\n",
-        encoding="utf-8",
+        '[mongo]\n'
+        'host=127.0.0.1\n'
+        'port=27017\n'
+        'database=dc_test\n'
+        'migrations=migrations_broker_mongo\n'
+        'metastore=database_migrations\n'
+        'dry_run=false\n'
+        f'username={username}\n'
+        f'password={password}\n',
+        encoding='utf-8',
     )
     return config_path
 
@@ -86,36 +86,36 @@ def _read_container_logs(container: object, container_name: str) -> str:
             chunks: list[str] = []
             for part in raw:
                 if isinstance(part, bytes):
-                    chunks.append(part.decode("utf-8", errors="replace"))
+                    chunks.append(part.decode('utf-8', errors='replace'))
                 else:
                     chunks.append(str(part))
-            return "\n".join(chunks).strip()
+            return '\n'.join(chunks).strip()
         if isinstance(raw, bytes):
-            return raw.decode("utf-8", errors="replace")
+            return raw.decode('utf-8', errors='replace')
         return str(raw)
     except Exception:
         pass
 
     try:
-        docker_obj = getattr(container, "_container", None)
+        docker_obj = getattr(container, '_container', None)
         if docker_obj is not None:
             raw2 = docker_obj.logs(stdout=True, stderr=True, timestamps=True)
             if isinstance(raw2, bytes):
-                return raw2.decode("utf-8", errors="replace")
+                return raw2.decode('utf-8', errors='replace')
             return str(raw2)
     except Exception as exc:  # pragma: no cover
-        return f"<failed to fetch {container_name} logs: {exc}>"
+        return f'<failed to fetch {container_name} logs: {exc}>'
 
-    return f"<{container_name} logs unavailable>"
+    return f'<{container_name} logs unavailable>'
 
 
 def _dump_container_logs(
     container: object, nodeid: str, repo_root: pathlib.Path, phase: str, backend: str
 ) -> None:
-    logs_dir = repo_root / "logs" / backend
+    logs_dir = repo_root / 'logs' / backend
     logs_dir.mkdir(parents=True, exist_ok=True)
-    out_file = logs_dir / f"{_slug(nodeid)}-{_slug(phase)}.log"
-    out_file.write_text(_read_container_logs(container, backend), encoding="utf-8")
+    out_file = logs_dir / f'{_slug(nodeid)}-{_slug(phase)}.log'
+    out_file.write_text(_read_container_logs(container, backend), encoding='utf-8')
 
 
 @pytest.fixture
@@ -131,27 +131,27 @@ def postgres_container(request: pytest.FixtureRequest) -> PostgresContainer:
         container.start()
     except Exception as exc:  # pragma: no cover - environment dependent
         pytest.skip(f'Postgres container is unavailable: {exc}')
-    _dump_container_logs(container, request.node.nodeid, repo_root, "after-init", "postgres")
+    _dump_container_logs(container, request.node.nodeid, repo_root, 'after-init', 'postgres')
     try:
         yield container
     finally:
-        _dump_container_logs(container, request.node.nodeid, repo_root, "teardown", "postgres")
+        _dump_container_logs(container, request.node.nodeid, repo_root, 'teardown', 'postgres')
         container.stop()
 
 
 @pytest.fixture
 def mongo_container(request: pytest.FixtureRequest) -> MongoDbContainer:
     repo_root = pathlib.Path(__file__).resolve().parents[2]
-    container = MongoDbContainer("mongo:8")
+    container = MongoDbContainer('mongo:8')
     try:
         container.start()
     except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"Mongo container is unavailable: {exc}")
-    _dump_container_logs(container, request.node.nodeid, repo_root, "after-init", "mongo")
+        pytest.skip(f'Mongo container is unavailable: {exc}')
+    _dump_container_logs(container, request.node.nodeid, repo_root, 'after-init', 'mongo')
     try:
         yield container
     finally:
-        _dump_container_logs(container, request.node.nodeid, repo_root, "teardown", "mongo")
+        _dump_container_logs(container, request.node.nodeid, repo_root, 'teardown', 'mongo')
         container.stop()
 
 
@@ -215,38 +215,38 @@ def master_api_base_url_mongo(
     port = _free_port()
     repo_root = pathlib.Path(__file__).resolve().parents[2]
     migration_python = _venv_python(repo_root)
-    log_dir = repo_root / "logs"
+    log_dir = repo_root / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     mongo_uri = str(mongo_container.get_connection_url())
     migration_config = _write_mongo_migrations_config(
         repo_root=repo_root,
-        username=str(getattr(mongo_container, "username", "test")),
-        password=str(getattr(mongo_container, "password", "test")),
+        username=str(getattr(mongo_container, 'username', 'test')),
+        password=str(getattr(mongo_container, 'password', 'test')),
     )
     env = os.environ.copy()
     env.update(
         {
-            "DB_BACKEND" : "mongo",
+            'DB_BACKEND' : 'mongo',
             'DB_HOST'    : mongo_uri.split('@')[1].split(':')[0],
             'DB_PORT'    : mongo_uri.split(':')[-1],
             'DB_USER'    : mongo_uri.split('//')[1].split(':')[0],
             'DB_PASSWORD': mongo_uri.split('//')[1].split(':')[1].split('@')[0],
-            "DB_NAME"    : "dc_test",
-            "MASTER_HOST": "127.0.0.1",
-            "MASTER_PORT": str(port),
-            "LOG_DIR": str(log_dir),
-            "MASTER_LOG_FILE": str(log_dir / "master.log"),
-            "INIT_MONGO_PYTHON": migration_python,
-            "INIT_DB_SCRIPT": str(repo_root / "scripts" / "init_mongo.py"),
-            "MIGRATIONS_DIR": str(repo_root / "migrations_broker_mongo"),
-            "MONGODB_MIGRATIONS_CONFIG": str(migration_config),
-            "MASTER_SKIP_DB_MIGRATION": "false",
+            'DB_NAME'    : 'dc_test',
+            'MASTER_HOST': '127.0.0.1',
+            'MASTER_PORT': str(port),
+            'LOG_DIR': str(log_dir),
+            'MASTER_LOG_FILE': str(log_dir / 'master.log'),
+            'INIT_MONGO_PYTHON': migration_python,
+            'INIT_DB_SCRIPT': str(repo_root / 'scripts' / 'init_mongo.py'),
+            'MIGRATIONS_DIR': str(repo_root / 'migrations_broker_mongo'),
+            'MONGODB_MIGRATIONS_CONFIG': str(migration_config),
+            'MASTER_SKIP_DB_MIGRATION': 'false',
         }
     )
     process: ManagedProcess = start_process([str(dc_master_bin)], env=env, cwd=repo_root)
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = f'http://127.0.0.1:{port}'
     status = wait_for_http_ready(
-        f"{base_url}/api/v1/tasks",
+        f'{base_url}/api/v1/tasks',
         process,
         timeout_sec=30,
         acceptable_statuses={200},
@@ -254,9 +254,9 @@ def master_api_base_url_mongo(
     if status == -1:
         returncode, stdout, stderr = stop_process(process)
         pytest.fail(
-            "dc_master did not become ready on mongo backend.\n"
-            f"returncode={returncode}\n"
-            f"output:\n{combined_output(stdout, stderr)}"
+            'dc_master did not become ready on mongo backend.\n'
+            f'returncode={returncode}\n'
+            f'output:\n{combined_output(stdout, stderr)}'
         )
     try:
         yield base_url

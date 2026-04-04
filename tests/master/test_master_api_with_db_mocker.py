@@ -11,13 +11,13 @@ def _response_dump(response: requests.Response) -> str:
         payload = response.json()
         payload_text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
     except ValueError:
-        payload_text = "<non-json>"
+        payload_text = '<non-json>'
     return (
-        f"request={response.request.method} {response.url}\n"
-        f"status={response.status_code}\n"
-        f"headers={dict(response.headers)}\n"
-        f"text={response.text}\n"
-        f"json={payload_text}"
+        f'request={response.request.method} {response.url}\n'
+        f'status={response.status_code}\n'
+        f'headers={dict(response.headers)}\n'
+        f'text={response.text}\n'
+        f'json={payload_text}'
     )
 
 
@@ -79,19 +79,19 @@ def _exercise_task_api(base_url: str, command_suffix: str) -> None:
     assert response.status_code == 200, _response_dump(response)
     tasks = response.json()['tasks']
     assert any(int(task['task_id']) == task_id for task in tasks), (
-        f"created task_id={task_id} not found in tasks list:\n"
-        f"{json.dumps(tasks, ensure_ascii=False, indent=2)}"
+        f'created task_id={task_id} not found in tasks list:\n'
+        f'{json.dumps(tasks, ensure_ascii=False, indent=2)}'
     )
 
 
 @pytest.mark.integration
 def test_master_agent_api_with_postgres_container(master_api_base_url: str) -> None:
-    _exercise_agent_api(master_api_base_url, "pg")
+    _exercise_agent_api(master_api_base_url, 'pg')
 
 
 @pytest.mark.integration
 def test_master_task_api_with_postgres_container(master_api_base_url: str) -> None:
-    _exercise_task_api(master_api_base_url, "pg")
+    _exercise_task_api(master_api_base_url, 'pg')
 
 
 @pytest.mark.integration
@@ -102,12 +102,12 @@ def test_master_unknown_route_returns_not_found(master_api_base_url: str) -> Non
 
 @pytest.mark.integration
 def test_master_agent_api_with_mongo_container(master_api_base_url_mongo: str) -> None:
-    _exercise_agent_api(master_api_base_url_mongo, "mongo")
+    _exercise_agent_api(master_api_base_url_mongo, 'mongo')
 
 
 @pytest.mark.integration
 def test_master_task_api_with_mongo_container(master_api_base_url_mongo: str) -> None:
-    _exercise_task_api(master_api_base_url_mongo, "mongo")
+    _exercise_task_api(master_api_base_url_mongo, 'mongo')
 
 
 @pytest.mark.integration
