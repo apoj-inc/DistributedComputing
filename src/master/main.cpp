@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -104,6 +105,57 @@ std::string ToLower(std::string value) {
 bool ParseBoolEnvValue(const std::string& value) {
     const std::string lower = ToLower(TrimWhitespace(value));
     return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
+}
+
+bool ParseValidatedEnvInt(const char* key,
+                          int default_value,
+                          int min_value,
+                          int* out,
+                          std::string* error) {
+    if (!out) {
+        if (error) {
+            *error = "Internal error: ParseValidatedEnvInt output pointer is null";
+        }
+        return false;
+    }
+    const char* raw = std::getenv(key);
+    if (!raw) {
+        *out = default_value;
+        return true;
+    }
+
+    std::string value(raw);
+    if (value.empty()) {
+        if (error) {
+            *error = std::string("Invalid ") + key + ": value cannot be empty";
+        }
+        return false;
+    }
+
+    char* end = nullptr;
+    long parsed = std::strtol(value.c_str(), &end, 10);
+    if (!end || *end != '\0') {
+        if (error) {
+            *error = std::string("Invalid ") + key + ": expected integer, got '" + value + "'";
+        }
+        return false;
+    }
+    if (parsed < static_cast<long>(min_value)) {
+        if (error) {
+            *error = std::string("Invalid ") + key + ": must be >= " +
+                     std::to_string(min_value) + ", got " + std::to_string(parsed);
+        }
+        return false;
+    }
+    if (parsed > static_cast<long>(std::numeric_limits<int>::max())) {
+        if (error) {
+            *error = std::string("Invalid ") + key + ": value is too large";
+        }
+        return false;
+    }
+
+    *out = static_cast<int>(parsed);
+    return true;
 }
 
 void PrintUsage() {
@@ -244,6 +296,24 @@ int main(int argc, char* argv[]) {
             dc::common::GetEnvOrDefault("SKIP_DB_MIGRATION", "false")));
 
     dc::broker::DbConfig db;
+    std::string reconnect_error;
+    if (!ParseValidatedEnvInt("BROKER_RECONNECT_ATTEMPTS",
+                              5,
+                              1,
+                              &db.reconnect_attempts,
+                              &reconnect_error)) {
+        spdlog::critical("{}", reconnect_error);
+        return 2;
+    }
+    if (!ParseValidatedEnvInt("BROKER_RECONNECT_COOLDOWN_SEC",
+                              2,
+                              0,
+                              &db.reconnect_cooldown_sec,
+                              &reconnect_error)) {
+        spdlog::critical("{}", reconnect_error);
+        return 2;
+    }
+
     const std::string backend = ToLower(dc::common::GetEnvOrDefault("DB_BACKEND", "postgres"));
     if (backend != "postgres" && backend != "mongo") {
         spdlog::critical("Invalid DB_BACKEND '{}'. Expected 'postgres' or 'mongo'.", backend);
@@ -300,12 +370,12 @@ int main(int argc, char* argv[]) {
             broker = new dc::broker::MongoBroker(db);
         } catch (const mongocxx::exception& ex) {
             spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
-                             broker->GetConnectionString(),
+                             db.host + ":" + db.port,
                              ex.what());
             return 2;
         } catch (const std::exception& ex) {
             spdlog::critical("Failed to initialize Mongo broker for URI '{}': {}",
-                             broker->GetConnectionString(),
+                             db.host + ":" + db.port,
                              ex.what());
             return 2;
         }

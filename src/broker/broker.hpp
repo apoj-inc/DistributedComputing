@@ -1,12 +1,16 @@
 #pragma once
 
 #include <cstdint>
+#include <chrono>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "common/logging.hpp"
 #include "status.hpp"
 
 namespace dc {
@@ -19,6 +23,8 @@ struct DbConfig {
     std::string password;
     std::string dbname;
     std::string sslmode;
+    int reconnect_attempts = 5;
+    int reconnect_cooldown_sec = 2;
 };
 
 struct AgentInput {
@@ -146,6 +152,55 @@ public:
     };
 
 protected:
+    template <typename Fn>
+    auto ExecuteWithRetry(const std::string& operation, Fn&& fn) const -> decltype(fn()) {
+        const int attempts = config_.reconnect_attempts;
+        const int cooldown_sec = config_.reconnect_cooldown_sec;
+        for (int attempt = 1; attempt <= attempts; ++attempt) {
+            try {
+                return fn();
+            } catch (const std::exception& ex) {
+                if (attempt >= attempts) {
+                    spdlog::error(
+                        "Broker operation '{}' failed on final attempt {}/{}: {}",
+                        operation,
+                        attempt,
+                        attempts,
+                        ex.what());
+                    throw;
+                }
+                spdlog::warn(
+                    "Broker operation '{}' failed on attempt {}/{}: {}. Retrying in {}s.",
+                    operation,
+                    attempt,
+                    attempts,
+                    ex.what(),
+                    cooldown_sec);
+            } catch (...) {
+                if (attempt >= attempts) {
+                    spdlog::error(
+                        "Broker operation '{}' failed on final attempt {}/{} with unknown exception.",
+                        operation,
+                        attempt,
+                        attempts);
+                    throw;
+                }
+                spdlog::warn(
+                    "Broker operation '{}' failed on attempt {}/{} with unknown exception. Retrying in {}s.",
+                    operation,
+                    attempt,
+                    attempts,
+                    cooldown_sec);
+            }
+
+            if (cooldown_sec > 0) {
+                std::this_thread::sleep_for(std::chrono::seconds(cooldown_sec));
+            }
+        }
+
+        throw std::runtime_error("Retry loop exhausted unexpectedly");
+    }
+
     const std::string connectionString_;
 
     const BrokerType broker_type_;

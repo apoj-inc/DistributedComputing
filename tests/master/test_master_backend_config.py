@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -133,3 +134,55 @@ def test_master_skips_migrations_when_flag_enabled(
     assert result.returncode != 74
     assert 'postgres migration script invoked' not in output
     assert 'DB migration step skipped' in output
+
+
+@pytest.mark.integration
+def test_master_rejects_non_integer_broker_reconnect_attempts(dc_master_bin, run_binary) -> None:
+    env = os.environ.copy()
+    env['BROKER_RECONNECT_ATTEMPTS'] = 'abc'
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert "Invalid BROKER_RECONNECT_ATTEMPTS: expected integer, got 'abc'" in output
+
+
+@pytest.mark.integration
+def test_master_rejects_negative_broker_reconnect_cooldown(dc_master_bin, run_binary) -> None:
+    env = os.environ.copy()
+    env['BROKER_RECONNECT_COOLDOWN_SEC'] = '-1'
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert 'Invalid BROKER_RECONNECT_COOLDOWN_SEC: must be >= 0, got -1' in output
+
+
+@pytest.mark.integration
+def test_master_applies_broker_reconnect_attempts_and_cooldown_on_startup_failure(
+    dc_master_bin, run_binary
+) -> None:
+    env = os.environ.copy()
+    env.update(
+        {
+            'DB_BACKEND': 'mongo',
+            'DB_HOST': '127.0.0.1',
+            'DB_PORT': '1',
+            'DB_USER': 'u',
+            'DB_PASSWORD': 'p',
+            'DB_NAME': 'd',
+            'MASTER_SKIP_DB_MIGRATION': '1',
+            'BROKER_RECONNECT_ATTEMPTS': '2',
+            'BROKER_RECONNECT_COOLDOWN_SEC': '1',
+        }
+    )
+
+    started = time.monotonic()
+    result = run_binary(dc_master_bin, env=env, timeout=8)
+    elapsed = time.monotonic() - started
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert "Broker operation 'mongo startup ping' failed on attempt 1/2" in output
+    assert "Broker operation 'mongo startup ping' failed on final attempt 2/2" in output
+    assert elapsed >= 0.8, f'expected reconnect cooldown delay, elapsed={elapsed:.3f}s'

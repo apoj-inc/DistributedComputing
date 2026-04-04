@@ -44,6 +44,8 @@ Master service:
 - `MASTER_LOG_LEVEL` (default: `trace`)
 - `HEARTBEAT_SEC` (default: `30`)
 - `OFFLINE_SEC` (default: `120`)
+- `BROKER_RECONNECT_ATTEMPTS` (default: `5`, total attempts including first try, must be `>= 1`)
+- `BROKER_RECONNECT_COOLDOWN_SEC` (default: `2`, cooldown in seconds between failed attempts, must be `>= 0`)
 - `MAX_LOG_UPLOAD_BYTES` (default: `10485760`, limit на размер загружаемого лога от агента)
 - `INIT_DB_PYTHON` (optional python executable override for Postgres migrations runner)
 - `INIT_DB_SCRIPT` (optional path to Postgres migrations script, default: Postgres: `scripts/init_pg.py`MongoDB: `scripts/init_mongo.py`)
@@ -147,6 +149,8 @@ MASTER_LOG_FILE=logs/master.log
 MASTER_LOG_LEVEL=trace
 HEARTBEAT_SEC=30
 OFFLINE_SEC=120
+BROKER_RECONNECT_ATTEMPTS=5
+BROKER_RECONNECT_COOLDOWN_SEC=2
 ```
 
 Run with:
