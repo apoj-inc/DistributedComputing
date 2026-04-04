@@ -8,6 +8,9 @@ on:
         required: true
         default: "v1.0.0"
 
+env:
+  BUILD_TYPE: Release
+
 permissions:
     contents: write
 
@@ -43,6 +46,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install PostgreSQL
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpqxx-dev libpq-dev
+
     - name: Install MongoDB C++ driver deps
       run: |
         sudo apt-get update
@@ -56,7 +64,7 @@ jobs:
 
     - name: Prepare build for artifact
       shell: bash
-      run: tar -czf build-x86_64.tar.gz build
+      run: tar -czf build-arm.tar.gz build
     
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
@@ -82,9 +90,9 @@ jobs:
       shell: bash
       run: |
         mkdir ${{ runner.temp }}/x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/worker/dc_worker ${{ runner.temp }}/x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/master/dc_master ${{ runner.temp }}/x86_64
-        cp ${{ runner.temp }}/build/x86_64-linux/src/cli/dc_cli ${{ runner.temp }}/x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/worker/dc_worker ${{ runner.temp }}/dc_worker_x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/master/dc_master ${{ runner.temp }}/dc_master_x86_64
+        cp ${{ runner.temp }}/build/x86_64-linux/src/cli/dc_cli ${{ runner.temp }}/dc_cli_x86_64
 
     - name: Download arm
       uses: actions/download-artifact@v4
@@ -100,9 +108,9 @@ jobs:
       shell: bash
       run: |
         mkdir ${{ runner.temp }}/arm
-        cp ${{ runner.temp }}/build/arm-linux/src/worker/dc_worker ${{ runner.temp }}/arm
-        cp ${{ runner.temp }}/build/arm-linux/src/master/dc_master ${{ runner.temp }}/arm
-        cp ${{ runner.temp }}/build/arm-linux/src/cli/dc_cli ${{ runner.temp }}/arm
+        cp ${{ runner.temp }}/build/arm-linux/src/worker/dc_worker ${{ runner.temp }}/dc_worker_arm
+        cp ${{ runner.temp }}/build/arm-linux/src/master/dc_master ${{ runner.temp }}/dc_master_arm
+        cp ${{ runner.temp }}/build/arm-linux/src/cli/dc_cli ${{ runner.temp }}/dc_cli_arm
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
@@ -112,8 +120,7 @@ jobs:
         body: |
             ## DistributedComputing ${{ github.event.inputs.version }}
         files: |
-            ${{ runner.temp }}/x86_64
-            ${{ runner.temp }}/arm
+            ${{ runner.temp }}/dc*
         draft: false
         prerelease: false
     env:
