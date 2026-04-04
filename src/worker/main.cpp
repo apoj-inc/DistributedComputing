@@ -96,7 +96,7 @@ bool ParseArgs(int argc, char* argv[], WorkerArgs* args, std::string* error) {
         std::string arg(argv[i]);
         if (arg == "--once") {
             args->run_once = true;
-        } else if (arg == "--help" || arg == "-hpp") {
+        } else if (arg == "--help" || arg == "-h") {
             PrintUsage();
             return false;
         } else if (arg == "--env-file" || arg == "-e") {
