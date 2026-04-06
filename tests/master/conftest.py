@@ -217,30 +217,33 @@ def master_api_base_url_mongo(
     migration_python = _venv_python(repo_root)
     log_dir = repo_root / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
-    mongo_uri = str(mongo_container.get_connection_url())
+    mongo_username = str(getattr(mongo_container, 'username', 'test'))
+    mongo_password = str(getattr(mongo_container, 'password', 'test'))
+    db_host = mongo_container.get_container_host_ip()
+    db_port = mongo_container.get_exposed_port(27017)
     migration_config = _write_mongo_migrations_config(
         repo_root=repo_root,
-        username=str(getattr(mongo_container, 'username', 'test')),
-        password=str(getattr(mongo_container, 'password', 'test')),
+        username=mongo_username,
+        password=mongo_password,
     )
     env = os.environ.copy()
     env.update(
         {
             'DB_BACKEND' : 'mongo',
-            'DB_HOST'    : mongo_uri.split('@')[1].split(':')[0],
-            'DB_PORT'    : mongo_uri.split(':')[-1],
-            'DB_USER'    : mongo_uri.split('//')[1].split(':')[0],
-            'DB_PASSWORD': mongo_uri.split('//')[1].split(':')[1].split('@')[0],
+            'DB_HOST'    : db_host,
+            'DB_PORT'    : str(db_port),
+            'DB_USER'    : mongo_username,
+            'DB_PASSWORD': mongo_password,
             'DB_NAME'    : 'dc_test',
             'MASTER_HOST': '127.0.0.1',
             'MASTER_PORT': str(port),
             'LOG_DIR': str(log_dir),
             'MASTER_LOG_FILE': str(log_dir / 'master.log'),
-            'INIT_MONGO_PYTHON': migration_python,
+            'INIT_DB_PYTHON': migration_python,
             'INIT_DB_SCRIPT': str(repo_root / 'scripts' / 'init_mongo.py'),
             'MIGRATIONS_DIR': str(repo_root / 'migrations_broker_mongo'),
             'MONGODB_MIGRATIONS_CONFIG': str(migration_config),
-            'MASTER_SKIP_DB_MIGRATION': 'false',
+            'MASTER_SKIP_DB_MIGRATION': 'true',
         }
     )
     process: ManagedProcess = start_process([str(dc_master_bin)], env=env, cwd=repo_root)

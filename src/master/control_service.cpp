@@ -281,6 +281,11 @@ void ControlService::HandleCreateTask(const httplib::Request& req,
         SetJsonResponse(res, MakeError("DB_ERROR", ex.what()), 500);
         return;
     }
+    if (created_task_id <= 0) {
+        spdlog::error("DB error creating task: broker returned invalid task id {}", created_task_id);
+        SetJsonResponse(res, MakeError("DB_ERROR", "Failed to create task"), 500);
+        return;
+    }
 
     spdlog::info("Task created: {}", created_task_id);
     json response;
