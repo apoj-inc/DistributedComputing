@@ -197,61 +197,41 @@ std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::collection& counte
     mongocxx::options::find_one_and_update opts;
     opts.upsert(true);
     opts.return_document(mongocxx::options::return_document::k_after);
-    try {
-        auto result = ExecuteWithRetry("mongo find_next_task_id", [&]() {
-            return counters.find_one_and_update(
-                session,
-                make_document(kvp("_id", "tasks")),
-                make_document(kvp("$inc", make_document(kvp("seq", 1)))),
-                opts);
-        });
-        if (!result) {
-            spdlog::error("failed to allocate task_id");
-            return std::nullopt;
-        }
-        auto seq = ReadInt64(result->view(), "seq");
-        if (!seq) {
-            spdlog::error("counter sequence is missing");
-            return std::nullopt;
-        }
-        return *seq;
-    } catch (const std::exception& ex) {
-        spdlog::error("Couldn't allocate next task id with session: {}", ex.what());
-        return std::nullopt;
-    } catch (...) {
-        spdlog::error("Couldn't allocate next task id with session: unknown exception.");
+    auto result = counters.find_one_and_update(
+        session,
+        make_document(kvp("_id", "tasks")),
+        make_document(kvp("$inc", make_document(kvp("seq", 1)))),
+        opts);
+    if (!result) {
+        spdlog::error("failed to allocate task_id");
         return std::nullopt;
     }
+    auto seq = ReadInt64(result->view(), "seq");
+    if (!seq) {
+        spdlog::error("counter sequence is missing");
+        return std::nullopt;
+    }
+    return *seq;
 }
 
 std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::collection& counters) {
     mongocxx::options::find_one_and_update opts;
     opts.upsert(true);
     opts.return_document(mongocxx::options::return_document::k_after);
-    try {
-        auto result = ExecuteWithRetry("mongo find_next_task_id_no_session", [&]() {
-            return counters.find_one_and_update(
-                make_document(kvp("_id", "tasks")),
-                make_document(kvp("$inc", make_document(kvp("seq", 1)))),
-                opts);
-        });
-        if (!result) {
-            spdlog::error("failed to allocate task_id");
-            return std::nullopt;
-        }
-        auto seq = ReadInt64(result->view(), "seq");
-        if (!seq) {
-            spdlog::error("counter sequence is missing");
-            return std::nullopt;
-        }
-        return *seq;
-    } catch (const std::exception& ex) {
-        spdlog::error("Couldn't allocate next task id: {}", ex.what());
-        return std::nullopt;
-    } catch (...) {
-        spdlog::error("Couldn't allocate next task id: unknown exception.");
+    auto result = counters.find_one_and_update(
+            make_document(kvp("_id", "tasks")),
+            make_document(kvp("$inc", make_document(kvp("seq", 1)))),
+            opts);
+    if (!result) {
+        spdlog::error("failed to allocate task_id");
         return std::nullopt;
     }
+    auto seq = ReadInt64(result->view(), "seq");
+    if (!seq) {
+        spdlog::error("counter sequence is missing");
+        return std::nullopt;
+    }
+    return *seq;
 }
 
 bool MongoBroker::UpsertAgent(const AgentInput& agent) {

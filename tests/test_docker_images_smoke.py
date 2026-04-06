@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import shutil
 import subprocess
 from typing import Callable
 
@@ -23,11 +24,20 @@ def test_docker_image_build_and_help_run(
     docker_available: None,
     docker_tag_prefix: str,
     run_command: Callable[..., subprocess.CompletedProcess[str]],
+    dc_master_bin: pathlib.Path,
+    dc_worker_bin: pathlib.Path,
+    dc_cli_bin: pathlib.Path,
     target: str,
     expected_fragment: str,
 ) -> None:
     del docker_available
     repo_root = pathlib.Path(__file__).resolve().parents[1]
+    bin_dir = repo_root / 'bin'
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(dc_master_bin, bin_dir / 'dc_master')
+    shutil.copy2(dc_worker_bin, bin_dir / 'dc_worker')
+    shutil.copy2(dc_cli_bin, bin_dir / 'dc_cli')
+
     image_tag = f'{docker_tag_prefix}-{target}:latest'
 
     build = run_command(
