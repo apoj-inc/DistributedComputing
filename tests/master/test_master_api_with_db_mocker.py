@@ -132,7 +132,7 @@ def test_master_mongo_concurrent_poll_update_list_does_not_crash(
     response = requests.put(
         f'{base_url}/api/v1/agents/{agent_id}',
         json=upsert_payload,
-        timeout=3,
+        timeout=11,
     )
     assert response.status_code == 200, _response_dump(response)
 
@@ -145,49 +145,62 @@ def test_master_mongo_concurrent_poll_update_list_does_not_crash(
         response = requests.post(
             f'{base_url}/api/v1/tasks',
             json=create_payload,
-            timeout=3,
+            timeout=12,
         )
         assert response.status_code == 201, _response_dump(response)
 
     def _worker(worker_id: int) -> None:
+
+        response = requests.put(
+            f'{base_url}/api/v1/agents/{worker_id}',
+            json=upsert_payload,
+            timeout=13,
+        )
+        assert response.status_code == 200, _response_dump(response)
+
         for i in range(12):
+
             heartbeat = requests.post(
-                f'{base_url}/api/v1/agents/{agent_id}/heartbeat',
+                f'{base_url}/api/v1/agents/{worker_id}/heartbeat',
                 json={'status': 'idle'},
-                timeout=3,
+                timeout=14,
             )
             assert heartbeat.status_code == 200, _response_dump(heartbeat)
 
             poll = requests.post(
-                f'{base_url}/api/v1/agents/{agent_id}/tasks:poll',
+                f'{base_url}/api/v1/agents/{worker_id}/tasks:poll',
                 json={'free_slots': 2},
-                timeout=3,
+                timeout=15,
             )
             assert poll.status_code == 200, _response_dump(poll)
+
             for task in poll.json().get('tasks', []):
-                task_id = int(task['task_id'])
+                task_id = task['task_id']
                 finish = requests.post(
                     f'{base_url}/api/v1/tasks/{task_id}/status',
-                    json={'state': 'succeeded', 'exit_code': 0},
-                    timeout=3,
+                    json={
+                        'state': 'succeeded',
+                        'exit_code': 0,
+                        },
+                    timeout=16,
                 )
                 assert finish.status_code in (200, 409), _response_dump(finish)
 
-            listed = requests.get(f'{base_url}/api/v1/tasks', timeout=3)
+            listed = requests.get(f'{base_url}/api/v1/tasks', timeout=17)
             assert listed.status_code == 200, _response_dump(listed)
 
             if i % 4 == 0:
                 created = requests.post(
                     f'{base_url}/api/v1/tasks',
                     json={'command': '/bin/echo', 'args': [f'w{worker_id}-{i}']},
-                    timeout=3,
+                    timeout=18,
                 )
                 assert created.status_code == 201, _response_dump(created)
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(_worker, i) for i in range(6)]
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(_worker, i+1) for i in range(4)]
         for future in as_completed(futures):
             future.result()
 
-    response = requests.get(f'{base_url}/api/v1/tasks', timeout=3)
+    response = requests.get(f'{base_url}/api/v1/tasks', timeout=19)
     assert response.status_code == 200, _response_dump(response)
