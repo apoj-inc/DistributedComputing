@@ -48,8 +48,8 @@ public:
     int MarkOfflineAgentsAndRequeue(int offline_after_sec) override;
 
 private:
-    std::int64_t NextTaskId(mongocxx::client_session& session);
-    std::int64_t NextTaskId();
+    std::optional<std::int64_t> NextTaskId(mongocxx::client_session& session);
+    std::optional<std::int64_t> NextTaskId();
     std::int64_t CreateTaskNoTransaction(const TaskInput& task);
     std::optional<std::vector<TaskDispatch>> PollTasksForAgentNoTransaction(
         const std::string& agent_id,
