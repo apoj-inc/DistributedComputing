@@ -18,6 +18,7 @@
 #include <mongocxx/v_noabi/mongocxx/instance.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/find.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/find_one_and_update.hpp>
+#include <mongocxx/v_noabi/mongocxx/pool.hpp>
 #include <mongocxx/v_noabi/mongocxx/options/update.hpp>
 
 #include "common/logging.hpp"
@@ -176,36 +177,29 @@ bool IsTransactionUnsupported(const mongocxx::exception& ex) {
 MongoBroker::MongoBroker(DbConfig& config)
     : Broker(config, BrokerType::MONGO, GenerateConnectionString(config)),
       mongo_instance_(MongoInstance()),
-      client_(mongocxx::uri(connectionString_)),
-      db_(client_[config_.dbname]),
-      agents_(db_["agents"]),
-      tasks_(db_["tasks"]),
-      task_assignments_(db_["task_assignments"]),
-      counters_(db_["counters"]) {
+      client_pool_(mongocxx::uri(connectionString_)) {
     (void)mongo_instance_;
-    try {
-        ExecuteWithRetry("mongo startup ping", [this]() {
-            db_.run_command(make_document(kvp("ping", 1)));
-        });
-    } catch (const std::exception& ex) {
-        spdlog::error("Mongo startup ping failed: {}", ex.what());
-    } catch (...) {
-        spdlog::error("Mongo startup ping failed with unknown exception.");
-    }
+    ExecuteWithRetry("mongo startup ping", [this]() {
+        auto client = client_pool_.acquire();
+        auto db = (*client)[config_.dbname];
+        db.run_command(make_document(kvp("ping", 1)));
+    });
 }
 
 std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const {
     return "mongodb://" + config.user + ":" + config.password + "@" + config.host + ":" +
-           config.port + "/?authSource=admin";
+           config.port +
+           "/?authSource=admin&serverSelectionTimeoutMS=2000&connectTimeoutMS=2000";
 }
 
-std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::client_session& session) {
+std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::collection& counters,
+                                                    mongocxx::client_session& session) {
     mongocxx::options::find_one_and_update opts;
     opts.upsert(true);
     opts.return_document(mongocxx::options::return_document::k_after);
     try {
         auto result = ExecuteWithRetry("mongo find_next_task_id", [&]() {
-            return counters_.find_one_and_update(
+            return counters.find_one_and_update(
                 session,
                 make_document(kvp("_id", "tasks")),
                 make_document(kvp("$inc", make_document(kvp("seq", 1)))),
@@ -230,13 +224,13 @@ std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::client_session& se
     }
 }
 
-std::optional<std::int64_t> MongoBroker::NextTaskId() {
+std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::collection& counters) {
     mongocxx::options::find_one_and_update opts;
     opts.upsert(true);
     opts.return_document(mongocxx::options::return_document::k_after);
     try {
         auto result = ExecuteWithRetry("mongo find_next_task_id_no_session", [&]() {
-            return counters_.find_one_and_update(
+            return counters.find_one_and_update(
                 make_document(kvp("_id", "tasks")),
                 make_document(kvp("$inc", make_document(kvp("seq", 1)))),
                 opts);
@@ -263,8 +257,11 @@ std::optional<std::int64_t> MongoBroker::NextTaskId() {
 bool MongoBroker::UpsertAgent(const AgentInput& agent) {
     try {
         return ExecuteWithRetry("mongo upsert_agent", [&]() {
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents = db["agents"];
             auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
-            auto result = agents_.update_one(
+            auto result = agents.update_one(
                 make_document(kvp("agent_id", agent.agent_id)),
                 make_document(kvp("$set", make_document(
                     kvp("agent_id", agent.agent_id),
@@ -290,8 +287,11 @@ bool MongoBroker::UpsertAgent(const AgentInput& agent) {
 bool MongoBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
     try {
         return ExecuteWithRetry("mongo update_heartbeat", [&]() {
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents = db["agents"];
             auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
-            auto result = agents_.update_one(
+            auto result = agents.update_one(
                 make_document(kvp("agent_id", heartbeat.agent_id)),
                 make_document(kvp("$set", make_document(
                     kvp("status", AgentStatusToDb(heartbeat.status)),
@@ -310,7 +310,10 @@ bool MongoBroker::UpdateHeartbeat(const AgentHeartbeat& heartbeat) {
 std::optional<AgentRecord> MongoBroker::GetAgent(const std::string& agent_id) {
     try {
         return ExecuteWithRetry("mongo get_agent", [&]() {
-            auto result = agents_.find_one(make_document(kvp("agent_id", agent_id)));
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents = db["agents"];
+            auto result = agents.find_one(make_document(kvp("agent_id", agent_id)));
             if (!result) {
                 return std::optional<AgentRecord>{std::nullopt};
             }
@@ -342,6 +345,9 @@ std::vector<AgentRecord> MongoBroker::ListAgents(const std::optional<AgentStatus
                                                   int offset) {
     try {
         return ExecuteWithRetry("mongo list_agents", [&]() {
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents_collection = db["agents"];
             document filter;
             if (status) {
                 filter.append(kvp("status", AgentStatusToDb(*status)));
@@ -352,7 +358,7 @@ std::vector<AgentRecord> MongoBroker::ListAgents(const std::optional<AgentStatus
             opts.skip(offset);
             opts.sort(make_document(kvp("agent_id", 1)));
 
-            auto cursor = agents_.find(filter.view(), opts);
+            auto cursor = agents_collection.find(filter.view(), opts);
             std::vector<AgentRecord> agents;
             for (const auto& doc : cursor) {
                 AgentRecord record;
@@ -382,10 +388,14 @@ std::vector<AgentRecord> MongoBroker::ListAgents(const std::optional<AgentStatus
 std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
     try {
         return ExecuteWithRetry("mongo create_task", [&]() {
-            auto session = client_.start_session();
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto tasks = db["tasks"];
+            auto counters = db["counters"];
+            auto session = client->start_session();
             try {
                 session.start_transaction();
-                const auto task_id = NextTaskId(session);
+                const auto task_id = NextTaskId(counters, session);
                 if (!task_id) {
                     try {
                         session.abort_transaction();
@@ -419,7 +429,7 @@ std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
                 task_doc.append(kvp("constraints_ram_mb", constraints["ram_mb"].get<int>()));
             }
 
-            tasks_.insert_one(session, task_doc.view());
+            tasks.insert_one(session, task_doc.view());
             session.commit_transaction();
                 spdlog::debug("Mongo task created: {}", *task_id);
                 return *task_id;
@@ -431,7 +441,7 @@ std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
                 if (IsTransactionUnsupported(ex)) {
                     spdlog::warn(
                         "Mongo transactions unavailable; falling back to non-transactional create.");
-                    return CreateTaskNoTransaction(task);
+                    return CreateTaskNoTransaction(tasks, counters, task);
                 }
                 throw;
             } catch (...) {
@@ -451,8 +461,10 @@ std::int64_t MongoBroker::CreateTask(const TaskInput& task) {
     }
 }
 
-std::int64_t MongoBroker::CreateTaskNoTransaction(const TaskInput& task) {
-    const auto task_id = NextTaskId();
+std::int64_t MongoBroker::CreateTaskNoTransaction(mongocxx::collection& tasks,
+                                                  mongocxx::collection& counters,
+                                                  const TaskInput& task) {
+    const auto task_id = NextTaskId(counters);
     if (!task_id) {
         return 0;
     }
@@ -480,7 +492,7 @@ std::int64_t MongoBroker::CreateTaskNoTransaction(const TaskInput& task) {
         task_doc.append(kvp("constraints_ram_mb", constraints["ram_mb"].get<int>()));
     }
 
-    tasks_.insert_one(task_doc.view());
+    tasks.insert_one(task_doc.view());
     spdlog::debug("Mongo task created without transaction: {}", *task_id);
     return *task_id;
 }
@@ -488,7 +500,10 @@ std::int64_t MongoBroker::CreateTaskNoTransaction(const TaskInput& task) {
 std::optional<TaskRecord> MongoBroker::GetTask(std::int64_t task_id) {
     try {
         return ExecuteWithRetry("mongo get_task", [&]() {
-            auto result = tasks_.find_one(make_document(kvp("task_id", task_id)));
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto tasks = db["tasks"];
+            auto result = tasks.find_one(make_document(kvp("task_id", task_id)));
             if (!result) {
                 return std::optional<TaskRecord>{std::nullopt};
             }
@@ -540,6 +555,9 @@ std::vector<TaskSummary> MongoBroker::ListTasks(const std::optional<TaskState>& 
                                                  int offset) {
     try {
         return ExecuteWithRetry("mongo list_tasks", [&]() {
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto tasks_collection = db["tasks"];
             document filter;
             if (state) {
                 filter.append(kvp("state", TaskStateToDb(*state)));
@@ -553,7 +571,7 @@ std::vector<TaskSummary> MongoBroker::ListTasks(const std::optional<TaskState>& 
             opts.skip(offset);
             opts.sort(make_document(kvp("created_at", -1)));
 
-            auto cursor = tasks_.find(filter.view(), opts);
+            auto cursor = tasks_collection.find(filter.view(), opts);
             std::vector<TaskSummary> tasks;
             for (const auto& doc : cursor) {
                 TaskSummary summary;
@@ -577,10 +595,15 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                                                                          int free_slots) {
     try {
         return ExecuteWithRetry("mongo poll_tasks_for_agent", [&]() {
-            auto session = client_.start_session();
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents = db["agents"];
+            auto tasks = db["tasks"];
+            auto task_assignments = db["task_assignments"];
+            auto session = client->start_session();
             try {
                 session.start_transaction();
-                auto agent_result = agents_.find_one(session, make_document(kvp("agent_id", agent_id)));
+                auto agent_result = agents.find_one(session, make_document(kvp("agent_id", agent_id)));
                 if (!agent_result) {
                     session.abort_transaction();
                     return std::optional<std::vector<TaskDispatch>>{std::nullopt};
@@ -591,7 +614,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                 const int agent_ram = ReadInt(agent, "resources_ram_mb").value_or(0);
                 const auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
 
-                agents_.update_one(
+                agents.update_one(
                     session,
                     make_document(kvp("agent_id", agent_id)),
                     make_document(kvp("$set", make_document(kvp("last_heartbeat", now)))));
@@ -627,7 +650,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
             find_opts.sort(make_document(kvp("created_at", 1)));
             find_opts.limit(free_slots);
 
-            auto candidates = tasks_.find(session, JsonDoc(filter).view(), find_opts);
+            auto candidates = tasks.find(session, JsonDoc(filter).view(), find_opts);
             std::vector<TaskDispatch> dispatches;
             for (const auto& candidate : candidates) {
                 auto task_id = ReadInt64(candidate, "task_id");
@@ -643,7 +666,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                         {{"assigned_agent", nullptr}},
                     })},
                 };
-                auto assign_result = tasks_.update_one(
+                auto assign_result = tasks.update_one(
                     session,
                     JsonDoc(assign_filter).view(),
                     make_document(kvp("$set", make_document(
@@ -667,7 +690,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                     json::object());
                 dispatches.push_back(std::move(dispatch));
 
-                task_assignments_.insert_one(
+                task_assignments.insert_one(
                     session,
                     make_document(
                         kvp("task_id", *task_id),
@@ -675,7 +698,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                         kvp("assigned_at", now)));
             }
 
-                agents_.update_one(
+                agents.update_one(
                     session,
                     make_document(kvp("agent_id", agent_id)),
                     make_document(kvp("$set", make_document(
@@ -691,7 +714,12 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
                 if (IsTransactionUnsupported(ex)) {
                     spdlog::warn(
                         "Mongo transactions unavailable; falling back to non-transactional poll.");
-                    return PollTasksForAgentNoTransaction(agent_id, free_slots);
+                    return PollTasksForAgentNoTransaction(
+                        agents,
+                        tasks,
+                        task_assignments,
+                        agent_id,
+                        free_slots);
                 }
                 throw;
             } catch (...) {
@@ -712,9 +740,12 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgent(const st
 }
 
 std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgentNoTransaction(
+    mongocxx::collection& agents,
+    mongocxx::collection& tasks,
+    mongocxx::collection& task_assignments,
     const std::string& agent_id,
     int free_slots) {
-    auto agent_result = agents_.find_one(make_document(kvp("agent_id", agent_id)));
+    auto agent_result = agents.find_one(make_document(kvp("agent_id", agent_id)));
     if (!agent_result) {
         return std::nullopt;
     }
@@ -724,7 +755,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgentNoTransac
     const int agent_ram = ReadInt(agent, "resources_ram_mb").value_or(0);
     const auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
 
-    agents_.update_one(
+    agents.update_one(
         make_document(kvp("agent_id", agent_id)),
         make_document(kvp("$set", make_document(kvp("last_heartbeat", now)))));
 
@@ -758,7 +789,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgentNoTransac
     find_opts.sort(make_document(kvp("created_at", 1)));
     find_opts.limit(free_slots);
 
-    auto candidates = tasks_.find(JsonDoc(filter).view(), find_opts);
+    auto candidates = tasks.find(JsonDoc(filter).view(), find_opts);
     std::vector<TaskDispatch> dispatches;
     for (const auto& candidate : candidates) {
         auto task_id = ReadInt64(candidate, "task_id");
@@ -774,7 +805,7 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgentNoTransac
                 {{"assigned_agent", nullptr}},
             })},
         };
-        auto assign_result = tasks_.update_one(
+        auto assign_result = tasks.update_one(
             JsonDoc(assign_filter).view(),
             make_document(kvp("$set", make_document(
                 kvp("state", "Running"),
@@ -796,13 +827,13 @@ std::optional<std::vector<TaskDispatch>> MongoBroker::PollTasksForAgentNoTransac
             ParseJsonOrDefault(ReadString(candidate, "constraints_json").value_or("{}"), json::object());
         dispatches.push_back(std::move(dispatch));
 
-        task_assignments_.insert_one(make_document(
+        task_assignments.insert_one(make_document(
             kvp("task_id", *task_id),
             kvp("agent_id", agent_id),
             kvp("assigned_at", now)));
     }
 
-    agents_.update_one(
+    agents.update_one(
         make_document(kvp("agent_id", agent_id)),
         make_document(kvp("$set", make_document(
             kvp("status", dispatches.empty() ? "Idle" : "Busy")))));
@@ -818,10 +849,14 @@ bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
                                     const std::optional<std::string>& error_message) {
     try {
         return ExecuteWithRetry("mongo update_task_status", [&]() {
-            auto session = client_.start_session();
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto tasks = db["tasks"];
+            auto task_assignments = db["task_assignments"];
+            auto session = client->start_session();
             try {
                 session.start_transaction();
-                auto current_result = tasks_.find_one(session, make_document(kvp("task_id", task_id)));
+                auto current_result = tasks.find_one(session, make_document(kvp("task_id", task_id)));
                 if (!current_result) {
                     session.abort_transaction();
                     return false;
@@ -860,14 +895,14 @@ bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
                     set_doc.append(kvp("finished_at", now));
                 }
 
-                tasks_.update_one(
+                tasks.update_one(
                     session,
                     make_document(kvp("task_id", task_id)),
                     make_document(kvp("$set", set_doc.view())));
 
                 if (terminal) {
                     const std::string reason = (state == TaskState::Canceled) ? "canceled" : "completed";
-                    task_assignments_.update_many(
+                    task_assignments.update_many(
                         session,
                         make_document(
                             kvp("task_id", task_id),
@@ -889,6 +924,8 @@ bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
                     spdlog::warn(
                         "Mongo transactions unavailable; falling back to non-transactional status update.");
                     return UpdateTaskStatusNoTransaction(
+                        tasks,
+                        task_assignments,
                         task_id, state, exit_code, started_at, finished_at, error_message);
                 }
                 throw;
@@ -910,13 +947,15 @@ bool MongoBroker::UpdateTaskStatus(std::int64_t task_id,
 }
 
 bool MongoBroker::UpdateTaskStatusNoTransaction(
+    mongocxx::collection& tasks,
+    mongocxx::collection& task_assignments,
     std::int64_t task_id,
     TaskState state,
     const std::optional<int>& exit_code,
     const std::optional<std::string>& started_at,
     const std::optional<std::string>& finished_at,
     const std::optional<std::string>& error_message) {
-    auto current_result = tasks_.find_one(make_document(kvp("task_id", task_id)));
+    auto current_result = tasks.find_one(make_document(kvp("task_id", task_id)));
     if (!current_result) {
         return false;
     }
@@ -954,13 +993,13 @@ bool MongoBroker::UpdateTaskStatusNoTransaction(
         set_doc.append(kvp("finished_at", now));
     }
 
-    tasks_.update_one(
+    tasks.update_one(
         make_document(kvp("task_id", task_id)),
         make_document(kvp("$set", set_doc.view())));
 
     if (terminal) {
         const std::string reason = (state == TaskState::Canceled) ? "canceled" : "completed";
-        task_assignments_.update_many(
+        task_assignments.update_many(
             make_document(
                 kvp("task_id", task_id),
                 kvp("unassigned_at", make_document(kvp("$exists", false)))),
@@ -978,10 +1017,14 @@ bool MongoBroker::UpdateTaskStatusNoTransaction(
 CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
     try {
         return ExecuteWithRetry("mongo cancel_task", [&]() {
-            auto session = client_.start_session();
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto tasks = db["tasks"];
+            auto task_assignments = db["task_assignments"];
+            auto session = client->start_session();
             try {
                 session.start_transaction();
-                auto current_result = tasks_.find_one(session, make_document(kvp("task_id", task_id)));
+                auto current_result = tasks.find_one(session, make_document(kvp("task_id", task_id)));
                 if (!current_result) {
                     session.abort_transaction();
                     return CancelTaskResult::NotFound;
@@ -1002,12 +1045,12 @@ CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
                     set_doc.append(kvp("error_message", "canceled_by_user"));
                 }
 
-                tasks_.update_one(
+                tasks.update_one(
                     session,
                     make_document(kvp("task_id", task_id)),
                     make_document(kvp("$set", set_doc.view())));
 
-                task_assignments_.update_many(
+                task_assignments.update_many(
                     session,
                     make_document(
                         kvp("task_id", task_id),
@@ -1026,7 +1069,7 @@ CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
                 }
                 if (IsTransactionUnsupported(ex)) {
                     spdlog::warn("Mongo transactions unavailable; falling back to non-transactional cancel.");
-                    return CancelTaskNoTransaction(task_id);
+                    return CancelTaskNoTransaction(tasks, task_assignments, task_id);
                 }
                 throw;
             } catch (...) {
@@ -1046,8 +1089,10 @@ CancelTaskResult MongoBroker::CancelTask(std::int64_t task_id) {
     }
 }
 
-CancelTaskResult MongoBroker::CancelTaskNoTransaction(std::int64_t task_id) {
-    auto current_result = tasks_.find_one(make_document(kvp("task_id", task_id)));
+CancelTaskResult MongoBroker::CancelTaskNoTransaction(mongocxx::collection& tasks,
+                                                      mongocxx::collection& task_assignments,
+                                                      std::int64_t task_id) {
+    auto current_result = tasks.find_one(make_document(kvp("task_id", task_id)));
     if (!current_result) {
         return CancelTaskResult::NotFound;
     }
@@ -1066,11 +1111,11 @@ CancelTaskResult MongoBroker::CancelTaskNoTransaction(std::int64_t task_id) {
         set_doc.append(kvp("error_message", "canceled_by_user"));
     }
 
-    tasks_.update_one(
+    tasks.update_one(
         make_document(kvp("task_id", task_id)),
         make_document(kvp("$set", set_doc.view())));
 
-    task_assignments_.update_many(
+    task_assignments.update_many(
         make_document(
             kvp("task_id", task_id),
             kvp("unassigned_at", make_document(kvp("$exists", false)))),
@@ -1085,12 +1130,17 @@ CancelTaskResult MongoBroker::CancelTaskNoTransaction(std::int64_t task_id) {
 int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     try {
         return ExecuteWithRetry("mongo mark_offline_agents_and_requeue", [&]() {
-            auto session = client_.start_session();
+            auto client = client_pool_.acquire();
+            auto db = (*client)[config_.dbname];
+            auto agents = db["agents"];
+            auto tasks = db["tasks"];
+            auto task_assignments = db["task_assignments"];
+            auto session = client->start_session();
             try {
                 session.start_transaction();
                 const auto cutoff = bsoncxx::types::b_date(
                     std::chrono::system_clock::now() - std::chrono::seconds(offline_after_sec));
-                auto candidates = agents_.find(
+                auto candidates = agents.find(
                     session,
                     make_document(
                         kvp("status", make_document(kvp("$ne", "Offline"))),
@@ -1111,12 +1161,12 @@ int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
 
                 const auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
                 for (const auto& agent_id : offline_ids) {
-                    agents_.update_one(
+                    agents.update_one(
                         session,
                         make_document(kvp("agent_id", agent_id)),
                         make_document(kvp("$set", make_document(kvp("status", "Offline")))));
 
-                    task_assignments_.update_many(
+                    task_assignments.update_many(
                         session,
                         make_document(
                             kvp("agent_id", agent_id),
@@ -1125,7 +1175,7 @@ int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
                             kvp("unassigned_at", now),
                             kvp("reason", "agent_offline")))));
 
-                    tasks_.update_many(
+                    tasks.update_many(
                         session,
                         make_document(
                             kvp("assigned_agent", agent_id),
@@ -1148,7 +1198,11 @@ int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
                 if (IsTransactionUnsupported(ex)) {
                     spdlog::warn(
                         "Mongo transactions unavailable; falling back to non-transactional offline sweep.");
-                    return MarkOfflineAgentsAndRequeueNoTransaction(offline_after_sec);
+                    return MarkOfflineAgentsAndRequeueNoTransaction(
+                        agents,
+                        tasks,
+                        task_assignments,
+                        offline_after_sec);
                 }
                 throw;
             } catch (...) {
@@ -1168,10 +1222,13 @@ int MongoBroker::MarkOfflineAgentsAndRequeue(int offline_after_sec) {
     }
 }
 
-int MongoBroker::MarkOfflineAgentsAndRequeueNoTransaction(int offline_after_sec) {
+int MongoBroker::MarkOfflineAgentsAndRequeueNoTransaction(mongocxx::collection& agents,
+                                                          mongocxx::collection& tasks,
+                                                          mongocxx::collection& task_assignments,
+                                                          int offline_after_sec) {
     const auto cutoff = bsoncxx::types::b_date(
         std::chrono::system_clock::now() - std::chrono::seconds(offline_after_sec));
-    auto candidates = agents_.find(make_document(
+    auto candidates = agents.find(make_document(
         kvp("status", make_document(kvp("$ne", "Offline"))),
         kvp("last_heartbeat", make_document(kvp("$lt", cutoff)))));
 
@@ -1189,11 +1246,11 @@ int MongoBroker::MarkOfflineAgentsAndRequeueNoTransaction(int offline_after_sec)
 
     const auto now = bsoncxx::types::b_date(std::chrono::system_clock::now());
     for (const auto& agent_id : offline_ids) {
-        agents_.update_one(
+        agents.update_one(
             make_document(kvp("agent_id", agent_id)),
             make_document(kvp("$set", make_document(kvp("status", "Offline")))));
 
-        task_assignments_.update_many(
+        task_assignments.update_many(
             make_document(
                 kvp("agent_id", agent_id),
                 kvp("unassigned_at", make_document(kvp("$exists", false)))),
@@ -1201,7 +1258,7 @@ int MongoBroker::MarkOfflineAgentsAndRequeueNoTransaction(int offline_after_sec)
                 kvp("unassigned_at", now),
                 kvp("reason", "agent_offline")))));
 
-        tasks_.update_many(
+        tasks.update_many(
             make_document(
                 kvp("assigned_agent", agent_id),
                 kvp("state", make_document(kvp("$in", make_array("Running", "Queued"))))),

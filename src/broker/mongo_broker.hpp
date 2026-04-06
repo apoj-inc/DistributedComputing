@@ -1,10 +1,9 @@
 #pragma once
 
-#include <mongocxx/v_noabi/mongocxx/client.hpp>
 #include <mongocxx/v_noabi/mongocxx/client_session.hpp>
 #include <mongocxx/v_noabi/mongocxx/collection.hpp>
-#include <mongocxx/v_noabi/mongocxx/database.hpp>
 #include <mongocxx/v_noabi/mongocxx/instance.hpp>
+#include <mongocxx/v_noabi/mongocxx/pool.hpp>
 
 #include "broker.hpp"
 
@@ -48,28 +47,36 @@ public:
     int MarkOfflineAgentsAndRequeue(int offline_after_sec) override;
 
 private:
-    std::optional<std::int64_t> NextTaskId(mongocxx::client_session& session);
-    std::optional<std::int64_t> NextTaskId();
-    std::int64_t CreateTaskNoTransaction(const TaskInput& task);
+    std::optional<std::int64_t> NextTaskId(mongocxx::collection& counters,
+                                           mongocxx::client_session& session);
+    std::optional<std::int64_t> NextTaskId(mongocxx::collection& counters);
+    std::int64_t CreateTaskNoTransaction(mongocxx::collection& tasks,
+                                         mongocxx::collection& counters,
+                                         const TaskInput& task);
     std::optional<std::vector<TaskDispatch>> PollTasksForAgentNoTransaction(
+        mongocxx::collection& agents,
+        mongocxx::collection& tasks,
+        mongocxx::collection& task_assignments,
         const std::string& agent_id,
         int free_slots);
-    bool UpdateTaskStatusNoTransaction(std::int64_t task_id,
+    bool UpdateTaskStatusNoTransaction(mongocxx::collection& tasks,
+                                       mongocxx::collection& task_assignments,
+                                       std::int64_t task_id,
                                        TaskState state,
                                        const std::optional<int>& exit_code,
                                        const std::optional<std::string>& started_at,
                                        const std::optional<std::string>& finished_at,
                                        const std::optional<std::string>& error_message);
-    CancelTaskResult CancelTaskNoTransaction(std::int64_t task_id);
-    int MarkOfflineAgentsAndRequeueNoTransaction(int offline_after_sec);
+    CancelTaskResult CancelTaskNoTransaction(mongocxx::collection& tasks,
+                                             mongocxx::collection& task_assignments,
+                                             std::int64_t task_id);
+    int MarkOfflineAgentsAndRequeueNoTransaction(mongocxx::collection& agents,
+                                                 mongocxx::collection& tasks,
+                                                 mongocxx::collection& task_assignments,
+                                                 int offline_after_sec);
 
     mongocxx::instance& mongo_instance_;
-    mongocxx::client client_;
-    mongocxx::database db_;
-    mongocxx::collection agents_;
-    mongocxx::collection tasks_;
-    mongocxx::collection task_assignments_;
-    mongocxx::collection counters_;
+    mongocxx::pool client_pool_;
 };
 
 }  // namespace broker
