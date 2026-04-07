@@ -41,12 +41,12 @@ public:
     // Runs the agent; when run_once is true, performs a single heartbeat+poll cycle.
     int Run(bool run_once);
 
-    std::string getWorkerStateTranslated();
+    std::string getWorkerStateTranslated() const;
 
 private:
     bool Register();
     void TickOnce();
-    std::string translateWorkerState(WorkerState &workerState);
+    static std::string translateWorkerState(const WorkerState &workerState);
 
     WorkerConfig config_;
     std::unique_ptr<AgentClient> client_;

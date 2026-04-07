@@ -202,7 +202,7 @@ bool WorkerApp::Register() {
     return true;
 }
 
-std::string WorkerApp::translateWorkerState(WorkerState &workerState) {
+std::string WorkerApp::translateWorkerState(const WorkerState &workerState) {
     switch(workerState) {
         case WorkerState::OFFLINE:
             return "offline";
@@ -214,7 +214,7 @@ std::string WorkerApp::translateWorkerState(WorkerState &workerState) {
     return "unknown";
 }
 
-std::string WorkerApp::getWorkerStateTranslated() {
+std::string WorkerApp::getWorkerStateTranslated() const {
     return translateWorkerState(workerState_);
 }
 

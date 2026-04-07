@@ -35,7 +35,7 @@ struct TaskDispatch {
 
 class AgentClient {
 public:
-    AgentClient(std::string base_url, int timeout_ms);
+    AgentClient(std::string base_url, const int timeout_ms);
     virtual ~AgentClient() = default;
 
     virtual bool RegisterAgent(const AgentRegistration& reg,
