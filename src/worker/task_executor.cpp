@@ -83,7 +83,8 @@ std::string TaskExecutor::EnsureTaskLogDir(const std::string& task_id) {
 }
 
 TaskExecutionResult TaskExecutor::Run(const TaskDispatch& task,
-                                      const std::function<bool()>& is_canceled) {
+                                    const std::function<bool()>& is_canceled,
+                                    const std::function<void()>& doHeartbeat) {
     TaskExecutionResult result;
     result.started_at = dc::common::NowUtcIso8601();
 
@@ -178,6 +179,7 @@ TaskExecutionResult TaskExecutor::Run(const TaskDispatch& task,
             }
             remaining_ms -= wait_ms;
         }
+        doHeartbeat();
     }
 
     DWORD exit_code = 1;
@@ -261,6 +263,7 @@ TaskExecutionResult TaskExecutor::Run(const TaskDispatch& task,
                 break;
             }
         }
+        doHeartbeat();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 

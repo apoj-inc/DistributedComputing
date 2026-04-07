@@ -10,6 +10,12 @@
 namespace dc {
 namespace worker {
 
+enum class WorkerState{
+    OFFLINE,
+    IDLE,
+    BUSY,
+};
+
 struct WorkerConfig {
     std::string master_url;
     std::string agent_id;
@@ -35,14 +41,18 @@ public:
     // Runs the agent; when run_once is true, performs a single heartbeat+poll cycle.
     int Run(bool run_once);
 
+    std::string getWorkerStateTranslated();
+
 private:
     bool Register();
     void TickOnce();
+    std::string translateWorkerState(WorkerState &workerState);
 
     WorkerConfig config_;
     std::unique_ptr<AgentClient> client_;
     int heartbeat_interval_sec_ = 10;
     TaskExecutor executor_;
+    WorkerState workerState_;
 };
 
 // Собирает WorkerApp: читает конфигурацию из окружения, валидирует, создаёт клиент.

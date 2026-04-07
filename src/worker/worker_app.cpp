@@ -174,7 +174,8 @@ std::unique_ptr<WorkerApp> CreateWorkerAppFromEnv(std::string* error) {
 WorkerApp::WorkerApp(WorkerConfig config, std::unique_ptr<AgentClient> client)
     : config_(std::move(config)),
       client_(std::move(client)),
-      executor_(config_.log_dir) {}
+      executor_(config_.log_dir),
+      workerState_(WorkerState::IDLE) {}
 
 bool WorkerApp::Register() {
     AgentRegistration reg;
@@ -201,10 +202,26 @@ bool WorkerApp::Register() {
     return true;
 }
 
+std::string WorkerApp::translateWorkerState(WorkerState &workerState) {
+    switch(workerState) {
+        case WorkerState::OFFLINE:
+            return "offline";
+        case WorkerState::IDLE:
+            return "idle";
+        case WorkerState::BUSY:
+            return "busy";
+    }
+    return "unknown";
+}
+
+std::string WorkerApp::getWorkerStateTranslated() {
+    return translateWorkerState(workerState_);
+}
+
 void WorkerApp::TickOnce() {
-    const std::string status = "idle";
+    workerState_ = WorkerState::IDLE;
     std::string error;
-    if (!client_->SendHeartbeat(config_.agent_id, status, &error)) {
+    if (!client_->SendHeartbeat(config_.agent_id, getWorkerStateTranslated(), &error)) {
         spdlog::warn("Heartbeat failed: {}", error);
     } else {
         spdlog::debug("Heartbeat sent");
@@ -234,6 +251,8 @@ void WorkerApp::TickOnce() {
             }
         }
 
+        workerState_ = WorkerState::BUSY;
+
         const auto started_at = dc::common::NowUtcIso8601();
         if (!client_->UpdateTaskStatus(task.task_id, "running", std::nullopt, started_at,
                                        std::nullopt, std::nullopt, &error)) {
@@ -257,8 +276,16 @@ void WorkerApp::TickOnce() {
             spdlog::debug("State equals "+state);
             return state == "canceled" || state == "queued";
         };
+        auto doHeartbeat = [&]() -> void {
+            std::string error_task;
+            if (!client_->SendHeartbeat(config_.agent_id, getWorkerStateTranslated(), &error_task)) {
+                spdlog::warn("Heartbeat failed: {}", error_task);
+            } else {
+                spdlog::debug("Heartbeat sent");
+            }
+        };
 
-        TaskExecutionResult exec = executor_.Run(task, is_canceled);
+        TaskExecutionResult exec = executor_.Run(task, is_canceled, doHeartbeat);
         std::string state = "failed";
         std::optional<int> exit_code = exec.exit_code;
         std::string error_message;
