@@ -254,7 +254,8 @@ void WorkerApp::TickOnce() {
                 spdlog::warn("Cancel check failed for {}: {}", task.task_id, err);
                 return false;
             }
-            return state == "canceled";
+            spdlog::debug("State equals "+state);
+            return state == "canceled" || state == "queued";
         };
 
         TaskExecutionResult exec = executor_.Run(task, is_canceled);
