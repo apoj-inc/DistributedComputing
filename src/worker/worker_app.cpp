@@ -301,18 +301,19 @@ void WorkerApp::TickOnce() {
                 error_message += up_err;
             }
         }
-
-        if (!client_->UpdateTaskStatus(task.task_id,
-                                       state,
-                                       exit_code,
-                                       OptionalNonEmpty(started_at),
-                                       OptionalNonEmpty(exec.finished_at),
-                                       OptionalNonEmpty(error_message),
-                                       &error)) {
-            spdlog::warn("Failed to update task {} status: {}", task.task_id, error);
-        } else {
-            spdlog::info("Task {} completed: state={} exit_code={} log_dir={}",
-                         task.task_id, state, exec.exit_code, exec.stdout_path);
+        if (!exec.canceled) {
+            if (!client_->UpdateTaskStatus(task.task_id,
+                                        state,
+                                        exit_code,
+                                        OptionalNonEmpty(started_at),
+                                        OptionalNonEmpty(exec.finished_at),
+                                        OptionalNonEmpty(error_message),
+                                        &error)) {
+                spdlog::warn("Failed to update task {} status: {}", task.task_id, error);
+            } else {
+                spdlog::info("Task {} completed: state={} exit_code={} log_dir={}",
+                            task.task_id, state, exec.exit_code, exec.stdout_path);
+            }
         }
     }
 }
