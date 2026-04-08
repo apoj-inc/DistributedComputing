@@ -26,7 +26,8 @@ public:
     explicit TaskExecutor(std::string log_root);
 
     TaskExecutionResult Run(const TaskDispatch& task,
-                            const std::function<bool()>& is_canceled);
+                            const std::function<bool()>& is_canceled,
+                            const std::function<void()>& doHeartbeat);
 
 private:
     std::string EnsureTaskLogDir(const std::string& task_id);

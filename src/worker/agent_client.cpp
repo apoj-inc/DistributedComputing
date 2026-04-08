@@ -21,7 +21,7 @@ std::string BuildTaskPath(const std::string& task_id, const std::string& suffix)
 
 }  // namespace
 
-AgentClient::AgentClient(std::string base_url, int timeout_ms)
+AgentClient::AgentClient(std::string base_url, const int timeout_ms)
     : client_(std::make_unique<httplib::Client>(std::move(base_url))) {
     if (timeout_ms > 0) {
         auto timeout = std::chrono::milliseconds(timeout_ms);
