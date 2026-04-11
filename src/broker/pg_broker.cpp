@@ -83,6 +83,8 @@ std::string PgBroker::GenerateConnectionString(
             out << "sslcert=" << config.ssl.cert << " ";
             out << "sslkey=" << config.ssl.key << " ";
             break;
+        default:
+            throw std::runtime_error("Unexpected case");
     }
     return out.str();
 }

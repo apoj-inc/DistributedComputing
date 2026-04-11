@@ -60,8 +60,9 @@ inline const char* AgentStatusToDb(AgentStatus status) {
             return "Busy";
         case AgentStatus::Offline:
             return "Offline";
+        default:
+            return "Idle";
     }
-    return "Idle";
 }
 
 inline const char* TaskStateToDb(TaskState state) {
@@ -76,8 +77,9 @@ inline const char* TaskStateToDb(TaskState state) {
             return "Failed";
         case TaskState::Canceled:
             return "Canceled";
+        default:
+            return "Queued";
     }
-    return "Queued";
 }
 
 inline const char* AgentStatusToApi(AgentStatus status) {
@@ -88,8 +90,9 @@ inline const char* AgentStatusToApi(AgentStatus status) {
             return "busy";
         case AgentStatus::Offline:
             return "offline";
+        default:
+            return "idle";
     }
-    return "idle";
 }
 
 inline const char* TaskStateToApi(TaskState state) {
@@ -104,8 +107,9 @@ inline const char* TaskStateToApi(TaskState state) {
             return "failed";
         case TaskState::Canceled:
             return "canceled";
+        default:
+            return "queued";
     }
-    return "queued";
 }
 
 

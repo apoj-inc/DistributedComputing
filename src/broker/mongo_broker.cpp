@@ -201,6 +201,8 @@ std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const 
                 config.host, config.port, config.ssl.cert, config.ssl.key, config.ssl.rootcert,
                 2000, 2000
             );
+        default:
+            throw std::runtime_error("Unexpected case");
     }
 }
 

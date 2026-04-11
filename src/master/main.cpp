@@ -350,6 +350,8 @@ int main(int argc, char* argv[]) {
                 return 2;
             }
             break;
+        default:
+            throw std::runtime_error("Unexpected case");
     }
 
     // Ensure log root exists even if no task logs are present yet.
