@@ -321,8 +321,9 @@ int main(int argc, char* argv[]) {
     }
 
     db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
-    db.port = dc::common::GetEnvOrDefault("DB_PORT", "5432");
+    db.port = dc::common::GetEnvOrDefault("DB_PORT", backend == "mongo" ? "27017" : "5432");
     db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
+    db.mongo_auth_source = dc::common::GetEnvOrDefault("DB_MONGO_AUTH_SOURCE", "admin");
 
     try {
         db.authMethod = dc::broker::getAuthMethod(dc::common::GetEnvOrDefault("DB_AUTHMODE", "password"));

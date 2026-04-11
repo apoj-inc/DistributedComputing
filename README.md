@@ -29,10 +29,11 @@ Place the header-only libraries into `third_party/`:
 Database (used by Master startup migration scripts):
 - `DB_BACKEND` (default: `postgres`; allowed: `postgres`, `mongo`)
 - `DB_HOST` (default: `localhost`)
-- `DB_PORT` (default: `5432`)
+- `DB_PORT` (default: `5432` for `postgres`, `27017` for `mongo`)
 - `DB_USER` (required)
 - `DB_PASSWORD` (optional)
 - `DB_NAME` (required)
+- `DB_MONGO_AUTH_SOURCE` (optional for mongo password auth, default: `admin`)
 - `PG_SSLMODE` (optional)
 - `DB_CONFIG` (optional path to `.env` file; e.g. `configs/db.env`)
 
@@ -141,6 +142,7 @@ DB_BACKEND=postgres
 DB_AUTHMODE=password
 DB_USER=postgres
 DB_PASSWORD=secret
+DB_MONGO_AUTH_SOURCE=admin
 DB_SSL_ROOTCERT=
 DB_SSL_CERT=
 DB_SSL_KEY=

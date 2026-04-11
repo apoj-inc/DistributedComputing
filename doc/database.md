@@ -99,8 +99,13 @@ python3 scripts/init_pg.py --config configs/db.env
 Master also supports MongoDB storage when `DB_BACKEND=mongo`.
 
 Required variables for Mongo mode:
-- `MONGO_URI` (for example: `mongodb://127.0.0.1:27017`)
-- `MONGO_DB` (database name)
+- `DB_HOST` (default: `localhost`)
+- `DB_PORT` (default: `27017`)
+- `DB_NAME` (database name)
+- `DB_AUTHMODE` (`password` or `ssl`, default: `password`)
+- `DB_USER` and `DB_PASSWORD` (required for `DB_AUTHMODE=password`)
+- `DB_MONGO_AUTH_SOURCE` (optional for password auth, default: `admin`)
+- `DB_SSL_ROOTCERT` / `DB_SSL_CERT` / `DB_SSL_KEY` (for `DB_AUTHMODE=ssl`)
 
 Behavior notes:
 - `scripts/init_pg.py` is used only for `DB_BACKEND=postgres`.

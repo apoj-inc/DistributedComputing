@@ -191,14 +191,15 @@ std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const 
     switch(config.authMethod) {
         case AuthentificationMethod::PASSWORD:
             return std::format(
-                "mongodb://{}:{}@{}:{}/?authSource=admin&serverSelectionTimeoutMS={}&connectTimeoutMS={}",
-                config.user, config.password, config.host, config.port,
+                "mongodb://{}:{}@{}:{}/?authSource={}&serverSelectionTimeoutMS={}&connectTimeoutMS={}",
+                config.user, config.password, config.host, config.port, config.mongo_auth_source,
                 2000, 2000
             );
         case AuthentificationMethod::SSL:
             return std::format(
-                "mongodb://{}:{}/?ssl=true&sslclientcertificatekeyfile={}&ssl_key={}&ssl_ca_cert={}",
-                config.host, config.port, config.ssl.cert, config.ssl.key, config.ssl.rootcert
+                "mongodb://{}:{}/?ssl=true&sslclientcertificatekeyfile={}&ssl_key={}&ssl_ca_cert={}&serverSelectionTimeoutMS={}&connectTimeoutMS={}",
+                config.host, config.port, config.ssl.cert, config.ssl.key, config.ssl.rootcert,
+                2000, 2000
             );
     }
 }

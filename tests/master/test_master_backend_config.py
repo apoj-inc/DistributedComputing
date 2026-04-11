@@ -42,8 +42,10 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
 ) -> None:
     mongo_script = tmp_path / 'mongo_init_fail.py'
     mongo_script.write_text(
+        'import os\n'
         'import sys\n'
         'print(\'mongo migration script invoked\')\n'
+        'print(f\"mongo auth source={os.getenv(\'DB_MONGO_AUTH_SOURCE\', \'\')}\")\n'
         'sys.exit(73)\n',
         encoding='utf-8',
     )
@@ -55,6 +57,7 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
     env['DB_USER'] = 'local'
     env['DB_PASSWORD'] = 'local'
     env['DB_NAME'] = 'dc_test'
+    env['DB_MONGO_AUTH_SOURCE'] = 'admin'
     env['INIT_DB_SCRIPT'] = str(mongo_script)
     
     result = run_binary(dc_master_bin, env=env)
@@ -62,6 +65,7 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
 
     assert result.returncode == 73
     assert 'mongo migration script invoked' in output, output
+    assert 'mongo auth source=admin' in output, output
     assert 'Migrations failed with code 73' in output, output
 
 

@@ -69,6 +69,7 @@ def build_mongo_url(
     ssl_rootcert=None,
     ssl_cert=None,
     ssl_key=None,
+    auth_source='admin',
 ):
     auth = ''
     query = {}
@@ -80,7 +81,7 @@ def build_mongo_url(
                 auth = f'{user_enc}:{quote_plus(password)}@'
             else:
                 auth = f'{user_enc}@'
-            query['authSource'] = 'admin'
+            query['authSource'] = auth_source
     elif authmode == 'ssl':
         query['tls'] = 'true'
         if ssl_rootcert:
@@ -130,6 +131,7 @@ def main():
     parser.add_argument('--user')
     parser.add_argument('--password')
     parser.add_argument('--authmode')
+    parser.add_argument('--authsource')
     parser.add_argument('--sslrootcert')
     parser.add_argument('--sslcert')
     parser.add_argument('--sslkey')
@@ -148,6 +150,7 @@ def main():
     db_user = pick_value(args.user, env, config, 'DB_USER')
     db_password = pick_value(args.password, env, config, 'DB_PASSWORD')
     authmode = normalize_authmode(pick_value(args.authmode, env, config, 'DB_AUTHMODE', 'password'))
+    auth_source = pick_value(args.authsource, env, config, 'DB_MONGO_AUTH_SOURCE', 'admin')
     ssl_rootcert = pick_value(args.sslrootcert, env, config, 'DB_SSL_ROOTCERT')
     ssl_cert = pick_value(args.sslcert, env, config, 'DB_SSL_CERT')
     ssl_key = pick_value(args.sslkey, env, config, 'DB_SSL_KEY')
@@ -164,6 +167,7 @@ def main():
             ssl_rootcert=ssl_rootcert,
             ssl_cert=ssl_cert,
             ssl_key=ssl_key,
+            auth_source=auth_source,
         )
     db_name = pick_value(args.database, env, config, 'DB_NAME')
     migrations = pick_value(

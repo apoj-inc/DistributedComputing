@@ -27,6 +27,7 @@ struct DbConfig {
     std::string user;
     std::string password;
     std::string dbname;
+    std::string mongo_auth_source;
     AuthentificationMethod authMethod;
     SSLCerificates ssl;
     int reconnect_attempts = 5;
