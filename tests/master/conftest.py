@@ -235,6 +235,7 @@ def master_api_base_url_mongo(
             'DB_USER'    : mongo_username,
             'DB_PASSWORD': mongo_password,
             'DB_NAME'    : 'dc_test',
+            'DB_MONGO_AUTH_SOURCE': 'admin',
             'MASTER_HOST': '127.0.0.1',
             'MASTER_PORT': str(port),
             'LOG_DIR': str(log_dir),

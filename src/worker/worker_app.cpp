@@ -210,8 +210,9 @@ std::string WorkerApp::translateWorkerState(const WorkerState &workerState) {
             return "idle";
         case WorkerState::BUSY:
             return "busy";
+        default:
+            throw std::runtime_error("Unexpected case");
     }
-    return "unknown";
 }
 
 std::string WorkerApp::getWorkerStateTranslated() const {

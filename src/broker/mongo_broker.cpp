@@ -8,6 +8,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <format>
 #include <vector>
 
 #include <bsoncxx/v_noabi/bsoncxx/builder/basic/array.hpp>
@@ -187,9 +188,22 @@ MongoBroker::MongoBroker(DbConfig& config)
 }
 
 std::string MongoBroker::GenerateConnectionString(const DbConfig& config) const {
-    return "mongodb://" + config.user + ":" + config.password + "@" + config.host + ":" +
-           config.port +
-           "/?authSource=admin&serverSelectionTimeoutMS=2000&connectTimeoutMS=2000";
+    switch(config.authMethod) {
+        case AuthentificationMethod::PASSWORD:
+            return std::format(
+                "mongodb://{}:{}@{}:{}/?authSource={}&serverSelectionTimeoutMS={}&connectTimeoutMS={}",
+                config.user, config.password, config.host, config.port, config.mongo_auth_source,
+                2000, 2000
+            );
+        case AuthentificationMethod::SSL:
+            return std::format(
+                "mongodb://{}:{}/?ssl=true&sslclientcertificatekeyfile={}&ssl_key={}&ssl_ca_cert={}&serverSelectionTimeoutMS={}&connectTimeoutMS={}",
+                config.host, config.port, config.ssl.cert, config.ssl.key, config.ssl.rootcert,
+                2000, 2000
+            );
+        default:
+            throw std::runtime_error("Unexpected case");
+    }
 }
 
 std::optional<std::int64_t> MongoBroker::NextTaskId(mongocxx::collection& counters,

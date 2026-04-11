@@ -33,7 +33,7 @@ def test_master_mongo_backend_requires_connection_env(dc_master_bin, run_binary)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode != 0
-    assert 'Missing one of  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME environment variables.' in output
+    assert 'Missing user or password for password authentification' in output
 
 
 @pytest.mark.integration
@@ -42,8 +42,10 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
 ) -> None:
     mongo_script = tmp_path / 'mongo_init_fail.py'
     mongo_script.write_text(
+        'import os\n'
         'import sys\n'
         'print(\'mongo migration script invoked\')\n'
+        'print(f\"mongo auth source={os.getenv(\'DB_MONGO_AUTH_SOURCE\', \'\')}\")\n'
         'sys.exit(73)\n',
         encoding='utf-8',
     )
@@ -55,6 +57,7 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
     env['DB_USER'] = 'local'
     env['DB_PASSWORD'] = 'local'
     env['DB_NAME'] = 'dc_test'
+    env['DB_MONGO_AUTH_SOURCE'] = 'admin'
     env['INIT_DB_SCRIPT'] = str(mongo_script)
     
     result = run_binary(dc_master_bin, env=env)
@@ -62,6 +65,7 @@ def test_master_runs_mongo_migration_script_on_mongo_backend(
 
     assert result.returncode == 73
     assert 'mongo migration script invoked' in output, output
+    assert 'mongo auth source=admin' in output, output
     assert 'Migrations failed with code 73' in output, output
 
 
@@ -75,7 +79,88 @@ def test_master_postgres_backend_requires_credentials(dc_master_bin, run_binary)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode != 0
-    assert 'Missing DB_USER or DB_NAME' in output
+    assert 'Missing user or password for password authentification' in output
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    'missing_ssl_var',
+    [
+        'DB_SSL_ROOTCERT',
+        'DB_SSL_CERT',
+        'DB_SSL_KEY',
+    ],
+)
+def test_master_ssl_auth_requires_all_ssl_certificate_env_vars(
+    dc_master_bin, run_binary, missing_ssl_var: str
+) -> None:
+    env = os.environ.copy()
+    env['DB_BACKEND'] = 'postgres'
+    env['DB_AUTHMODE'] = 'ssl'
+    env['DB_NAME'] = 'dc_test'
+    env['DB_SSL_ROOTCERT'] = '/tmp/root.crt'
+    env['DB_SSL_CERT'] = '/tmp/client.crt'
+    env['DB_SSL_KEY'] = '/tmp/client.key'
+    env.pop(missing_ssl_var, None)
+
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert 'Missing rootcert, cert or user for key for ssl authentification' in output
+
+
+@pytest.mark.integration
+def test_master_accepts_ssl_auth_mode_and_reaches_migration_step(
+    dc_master_bin, run_binary, tmp_path: Path
+) -> None:
+    ssl_script = tmp_path / 'ssl_migrate_fail.py'
+    ssl_script.write_text(
+        'import sys\n'
+        'print(\'ssl migration script invoked\')\n'
+        'sys.exit(77)\n',
+        encoding='utf-8',
+    )
+
+    env = os.environ.copy()
+    env['DB_BACKEND'] = 'postgres'
+    env['DB_AUTHMODE'] = 'ssl'
+    env['DB_HOST'] = '127.0.0.1'
+    env['DB_PORT'] = '5432'
+    env['DB_NAME'] = 'dc_test'
+    env['DB_SSL_ROOTCERT'] = '/tmp/root.crt'
+    env['DB_SSL_CERT'] = '/tmp/client.crt'
+    env['DB_SSL_KEY'] = '/tmp/client.key'
+    env['INIT_DB_SCRIPT'] = str(ssl_script)
+
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode == 77
+    assert 'ssl migration script invoked' in output, output
+    assert 'Migrations failed with code 77' in output, output
+
+
+@pytest.mark.integration
+def test_master_postgres_ssl_startup_fails_with_invalid_tls_material(dc_master_bin, run_binary) -> None:
+    env = os.environ.copy()
+    env['DB_BACKEND'] = 'postgres'
+    env['DB_AUTHMODE'] = 'ssl'
+    env['DB_HOST'] = '127.0.0.1'
+    env['DB_PORT'] = '5432'
+    env['DB_NAME'] = 'dc_test'
+    env['DB_SSL_ROOTCERT'] = '/does/not/exist/root.crt'
+    env['DB_SSL_CERT'] = '/does/not/exist/client.crt'
+    env['DB_SSL_KEY'] = '/does/not/exist/client.key'
+    env['MASTER_SKIP_DB_MIGRATION'] = '1'
+    env['BROKER_RECONNECT_ATTEMPTS'] = '1'
+    env['BROKER_RECONNECT_COOLDOWN_SEC'] = '0'
+
+    result = run_binary(dc_master_bin, env=env)
+    output = combined_output(result.stdout, result.stderr)
+
+    assert result.returncode != 0
+    assert "Broker operation 'postgres startup connect' failed on final attempt 1/1" in output
 
 
 @pytest.mark.integration
