@@ -337,7 +337,7 @@ int main(int argc, char* argv[]) {
             db.user = dc::common::GetEnvOrDefault("DB_USER", "");
             db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
             if(db.user.empty() || db.password.empty()) {
-                spdlog::critical("Missing password or user for password authentification");
+                spdlog::critical("Missing user or password for password authentification");
                 return 2;
             }
             break;

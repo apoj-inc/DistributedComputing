@@ -33,7 +33,7 @@ def test_master_mongo_backend_requires_connection_env(dc_master_bin, run_binary)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode != 0
-    assert 'Missing one of  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME environment variables.' in output
+    assert 'Missing user or password for password authentification' in output
 
 
 @pytest.mark.integration
@@ -79,7 +79,7 @@ def test_master_postgres_backend_requires_credentials(dc_master_bin, run_binary)
     output = combined_output(result.stdout, result.stderr)
 
     assert result.returncode != 0
-    assert 'Missing DB_USER or DB_NAME' in output
+    assert 'Missing user or password for password authentification' in output
 
 
 @pytest.mark.integration
