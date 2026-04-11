@@ -1,20 +1,25 @@
 #pragma once
 
-#include <cstdint>
-#include <chrono>
-#include <optional>
-#include <stdexcept>
-#include <string>
-#include <thread>
-#include <vector>
-
 #include <nlohmann/json.hpp>
 
 #include "common/logging.hpp"
 #include "status.hpp"
 
 namespace dc {
-namespace broker {
+namespace broker { 
+
+enum class AuthentificationMethod {
+    PASSWORD,
+    SSL,
+};
+
+AuthentificationMethod getAuthMethod(const std::string& method);
+
+struct SSLCerificates {
+    std::string rootcert;
+    std::string cert;
+    std::string key;
+};
 
 struct DbConfig {
     std::string host;
@@ -22,7 +27,8 @@ struct DbConfig {
     std::string user;
     std::string password;
     std::string dbname;
-    std::string sslmode;
+    AuthentificationMethod authMethod;
+    SSLCerificates ssl;
     int reconnect_attempts = 5;
     int reconnect_cooldown_sec = 2;
 };
@@ -143,13 +149,11 @@ public:
     // Marks agents offline and requeues tasks assigned to them.
     virtual int MarkOfflineAgentsAndRequeue(int offline_after_sec) = 0;
 
-    const BrokerType GetBrokerType() const {
-        return broker_type_;
-    };
+    const BrokerType GetBrokerType() const;
 
-    std::string GetConnectionString() const {
-        return connectionString_;
-    };
+    const std::string GetConnectionString() const;
+
+    const DbConfig GetDbConfig() const;
 
 protected:
     template <typename Fn>
@@ -204,7 +208,7 @@ protected:
     const std::string connectionString_;
 
     const BrokerType broker_type_;
-    DbConfig config_;
+    const DbConfig config_;
 };
 
 }  // namespace broker

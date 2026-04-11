@@ -320,28 +320,35 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    if (backend == "postgres") {
-        db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
-        db.port = dc::common::GetEnvOrDefault("DB_PORT", "5432");
-        db.user = dc::common::GetEnvOrDefault("DB_USER", "");
-        db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
-        db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
-        db.sslmode = dc::common::GetEnvOrDefault("PG_SSLMODE", "");
+    db.host = dc::common::GetEnvOrDefault("DB_HOST", "localhost");
+    db.port = dc::common::GetEnvOrDefault("DB_PORT", "5432");
+    db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
 
-        if (db.user.empty() || db.dbname.empty()) {
-            spdlog::critical("Missing DB_USER or DB_NAME environment variable.");
-            return 2;
-        }
-    } else {
-        db.host = dc::common::GetEnvOrDefault("DB_HOST", "127.0.0.1");
-        db.port = dc::common::GetEnvOrDefault("DB_PORT", "27017");
-        db.user = dc::common::GetEnvOrDefault("DB_USER", "");
-        db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
-        db.dbname = dc::common::GetEnvOrDefault("DB_NAME", "");
-        if (db.host.empty() || db.port.empty() || db.user.empty() || db.password.empty() || db.dbname.empty()) {
-            spdlog::critical("Missing one of  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME environment variables.");
-            return 2;
-        }
+    try {
+        db.authMethod = dc::broker::getAuthMethod(dc::common::GetEnvOrDefault("DB_AUTHMODE", "password"));
+    } catch(std::exception ex) {
+        spdlog::critical(ex.what());
+        return 2;
+    }
+
+    switch(db.authMethod) {
+        case dc::broker::AuthentificationMethod::PASSWORD:
+            db.user = dc::common::GetEnvOrDefault("DB_USER", "");
+            db.password = dc::common::GetEnvOrDefault("DB_PASSWORD", "");
+            if(db.user.empty() || db.password.empty()) {
+                spdlog::critical("Missing password or user for password authentification");
+                return 2;
+            }
+            break;
+        case dc::broker::AuthentificationMethod::SSL:
+            db.ssl.rootcert = dc::common::GetEnvOrDefault("DB_SSL_ROOTCERT", "");
+            db.ssl.cert = dc::common::GetEnvOrDefault("DB_SSL_CERT", "");
+            db.ssl.key = dc::common::GetEnvOrDefault("DB_SSL_KEY", "");
+            if(db.ssl.rootcert.empty() || db.ssl.cert.empty() || db.ssl.key.empty()) {
+                spdlog::critical("Missing rootcert, cert or user for key for ssl authentification");
+                return 2;
+            }
+            break;
     }
 
     // Ensure log root exists even if no task logs are present yet.

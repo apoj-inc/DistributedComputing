@@ -1,6 +1,6 @@
 #include "pg_broker.hpp"
 
-#include <sstream>
+#include <format>
 
 #include <pqxx/pqxx>
 
@@ -68,26 +68,24 @@ std::string PgBroker::GenerateConnectionString(
         const DbConfig& config
     ) const {
     std::ostringstream out;
-    if (!config.host.empty()) {
-        out << "host=" << config.host << " ";
-    }
-    if (!config.port.empty()) {
-        out << "port=" << config.port << " ";
-    }
-    if (!config.user.empty()) {
-        out << "user=" << config.user << " ";
-    }
-    if (!config.password.empty()) {
-        out << "password=" << config.password << " ";
-    }
-    if (!config.dbname.empty()) {
-        out << "dbname=" << config.dbname << " ";
-    }
-    if (!config.sslmode.empty()) {
-        out << "sslmode=" << config.sslmode << " ";
+    out << "host=" << config.host << " ";
+    out << "port=" << config.port << " ";
+    out << "dbname=" << config.dbname << " ";
+
+    switch(config.authMethod) {
+        case AuthentificationMethod::PASSWORD:
+            out << "user=" << config.user << " ";
+            out << "password=" << config.password << " ";
+            break;
+        case AuthentificationMethod::SSL:
+            out << "sslmode=" << "verify-full" << " ";
+            out << "sslrootcert=" << config.ssl.rootcert << " ";
+            out << "sslcert=" << config.ssl.cert << " ";
+            out << "sslkey=" << config.ssl.key << " ";
+            break;
     }
     return out.str();
-    }
+}
 
 bool PgBroker::UpsertAgent(const AgentInput& agent) {
     return ExecuteWithRetry("postgres upsert_agent", [&]() {
