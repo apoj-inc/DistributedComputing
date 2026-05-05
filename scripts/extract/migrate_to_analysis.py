@@ -1,3 +1,4 @@
+# migrations/20250315_01_initial.py
 from yoyo import step
 
 __depends__ = {}
@@ -23,30 +24,35 @@ steps = [
             task_id                       BIGINT PRIMARY KEY
                 REFERENCES quartus_task_results(task_id) ON DELETE CASCADE,
 
+            -- Existing parameters
             axi_data_width                BIGINT NOT NULL DEFAULT 32,
             axi_id_w_width                BIGINT NOT NULL DEFAULT 5,
             axi_id_r_width                BIGINT NOT NULL DEFAULT 5,
             axi_addr_width                BIGINT NOT NULL DEFAULT 16,
-
             axis_data_width               BIGINT NOT NULL DEFAULT 40,
             axis_id_width                 BIGINT NOT NULL DEFAULT 3,
             axis_dest_width               BIGINT NOT NULL DEFAULT 4,
             axis_user_width               BIGINT NOT NULL DEFAULT 4,
-
             axi_master_loader_fifo_depth  BIGINT NOT NULL DEFAULT 64,
-
             max_routers_x                 BIGINT NOT NULL DEFAULT 4,
             max_routers_y                 BIGINT NOT NULL DEFAULT 4,
-
             buffer_depth                  BIGINT NOT NULL DEFAULT 16,
             algorithm                     TEXT NOT NULL DEFAULT 'XY',
-
-            routers_count                 BIGINT NOT NULL,   -- computed, no default
+            routers_count                 BIGINT NOT NULL,
             core_count                    BIGINT NOT NULL,
             axi_max_id_width              BIGINT NOT NULL,
             axi_data_bytes                BIGINT NOT NULL,
+            defines_json                  JSONB NOT NULL DEFAULT '{}'::jsonb,
 
-            defines_json                  JSONB NOT NULL DEFAULT '{}'::jsonb
+            -- New parameters
+            topology                      TEXT NOT NULL DEFAULT 'Mesh',
+            buffer_allocator              TEXT NOT NULL DEFAULT 'Straight',
+            generatics_count              BIGINT NOT NULL DEFAULT 2,
+            generatics                    JSONB NOT NULL DEFAULT '[]'::jsonb,
+            virtual_channel_number        BIGINT NOT NULL DEFAULT 2,
+            simultanious_virtual_network_routing BIGINT NOT NULL DEFAULT 1,
+            virtual_network_number        BIGINT NOT NULL DEFAULT 2,
+            virtual_networks              JSONB NOT NULL DEFAULT '[]'::jsonb
         );
 
         CREATE TABLE IF NOT EXISTS quartus_entity_utilization (

@@ -78,6 +78,32 @@ def parse_int_maybe(value):
     return int(m.group(0).replace(",", ""))
 
 
+def parse_verilog_array(s: str):
+    """Parse Verilog array literal like '{2, 1} or {2,1} into Python list."""
+    s = s.strip()
+    if s.startswith("'{"):
+        s = s[2:]
+    elif s.startswith("{"):
+        s = s[1:]
+    else:
+        return None
+    if not s.endswith("}"):
+        return None
+    s = s[:-1].strip()
+    if not s:
+        return []
+    parts = s.split(",")
+    result = []
+    for p in parts:
+        p = p.strip()
+        # try int, else keep as string
+        if re.fullmatch(r"-?\d+", p):
+            result.append(int(p))
+        else:
+            result.append(p)
+    return result
+
+
 def normalize_metric_key(key: str) -> str:
     k = (key or "").strip().lower()
     k = k.replace(",", "")
@@ -329,6 +355,12 @@ def parse_define_value(raw: str):
     if "//" in v:
         v = v.split("//", 1)[0].strip()
 
+    # Check for Verilog array first
+    if v.startswith("'") or v.startswith("{"):
+        array_val = parse_verilog_array(v)
+        if array_val is not None:
+            return array_val
+
     if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
         return v[1:-1]
 
@@ -380,26 +412,43 @@ def build_task_parameters(defines: dict):
 
 
 def upsert_task_parameters(pg_dsn: str, task_id: int, params: dict, defines: dict):
-    # params keys are define names like "AXI_DATA_WIDTH"
-    columns = ["task_id", "defines_json"]
-    values = [task_id, json.dumps(defines)]
+    with psycopg.connect(pg_dsn) as conn:
+        with conn.cursor() as cur:
+            # Get all column names from the table except task_id and defines_json
+            cur.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'quartus_task_parameters'
+                  AND column_name NOT IN ('task_id', 'defines_json')
+                ORDER BY ordinal_position
+            """)
+            db_columns = {row[0] for row in cur.fetchall()}
 
-    for define_key, value in params.items():
-        # Convert to lowercase for the column name
-        col_name = define_key.lower()
-        columns.append(col_name)
-        values.append(value)
+        columns = ["task_id", "defines_json"]
+        values = [task_id, json.dumps(defines)]
 
-    placeholders = ["%s"] * len(values)
-    set_clause = ", ".join(f"{col} = EXCLUDED.{col}" for col in columns if col != "task_id")
+        for key, value in params.items():
+            col_name = key.lower()
+            if col_name in db_columns:
+                # Convert list/dict to JSON string for JSONB columns
+                if isinstance(value, (list, dict)):
+                    value = json.dumps(value)
+                columns.append(col_name)
+                values.append(value)
 
-    sql = f"""
-        INSERT INTO quartus_task_parameters ({', '.join(columns)})
-        VALUES ({', '.join(placeholders)})
-        ON CONFLICT (task_id) DO UPDATE SET
-            {set_clause}
-    """
-    ...
+        placeholders = ["%s"] * len(values)
+        set_clause = ", ".join(f"{col} = EXCLUDED.{col}" for col in columns if col != "task_id")
+
+        sql = f"""
+            INSERT INTO quartus_task_parameters ({', '.join(columns)})
+            VALUES ({', '.join(placeholders)})
+            ON CONFLICT (task_id) DO UPDATE SET
+                {set_clause}
+        """
+
+        with conn.cursor() as cur:
+            cur.execute(sql, values)
+        conn.commit()
 
 
 def upsert_postgres(pg_dsn: str, task_id: int, project_name: str, qar_filename: str, reports_json, fmax_json):
