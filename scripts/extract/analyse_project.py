@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import math
 import pathlib
 import re
 import shutil
@@ -13,83 +12,9 @@ import psycopg
 from pymongo import MongoClient
 
 
-DDL = """
-CREATE TABLE IF NOT EXISTS quartus_task_results (
-    task_id              BIGINT PRIMARY KEY,
-    project_name         TEXT NOT NULL,
-    revision_name        TEXT,
-    qar_filename         TEXT NOT NULL,
-    status               TEXT NOT NULL,
-    compiled_at          TIMESTAMPTZ,
-    top_fmax_mhz         DOUBLE PRECISION,
-    raw_fmax_json        JSONB NOT NULL DEFAULT '[]'::jsonb,
-    raw_summary_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS quartus_task_parameters (
-    task_id                       BIGINT PRIMARY KEY
-        REFERENCES quartus_task_results(task_id) ON DELETE CASCADE,
-
-    axi_data_width                BIGINT NOT NULL,
-    axi_id_w_width                BIGINT NOT NULL,
-    axi_id_r_width                BIGINT NOT NULL,
-    axi_addr_width                BIGINT NOT NULL,
-
-    axis_data_width               BIGINT NOT NULL,
-    axis_id_width                 BIGINT NOT NULL,
-    axis_dest_width               BIGINT NOT NULL,
-    axis_user_width               BIGINT NOT NULL,
-
-    axi_master_loader_fifo_depth  BIGINT NOT NULL,
-
-    max_routers_x                 BIGINT NOT NULL,
-    max_routers_y                 BIGINT NOT NULL,
-
-    buffer_depth                  BIGINT NOT NULL,
-    algorithm                     TEXT NOT NULL,
-
-    routers_count                 BIGINT NOT NULL,
-    core_count                    BIGINT NOT NULL,
-    axi_max_id_width              BIGINT NOT NULL,
-    axi_data_bytes                BIGINT NOT NULL,
-
-    defines_json                  JSONB NOT NULL DEFAULT '{}'::jsonb
-);
-
-CREATE TABLE IF NOT EXISTS quartus_entity_utilization (
-    task_id              BIGINT NOT NULL,
-    entity_id            BIGINT NOT NULL,
-    parent_entity_id     BIGINT,
-    entity_name          TEXT NOT NULL,
-    entity_path          TEXT NOT NULL,
-    raw_names_json       JSONB NOT NULL DEFAULT '[]'::jsonb,
-    source_panels_json   JSONB NOT NULL DEFAULT '[]'::jsonb,
-    alms                 BIGINT,
-    registers            BIGINT,
-    memory_bits          BIGINT,
-    metrics_json         JSONB NOT NULL DEFAULT '{}'::jsonb,
-    PRIMARY KEY (task_id, entity_id),
-    UNIQUE (task_id, entity_path),
-    FOREIGN KEY (task_id) REFERENCES quartus_task_results(task_id) ON DELETE CASCADE,
-    FOREIGN KEY (task_id, parent_entity_id)
-        REFERENCES quartus_entity_utilization(task_id, entity_id)
-        DEFERRABLE INITIALLY DEFERRED
-);
-"""
-
-
 def run(cmd, cwd=None):
     print("RUN:", " ".join(str(x) for x in cmd), flush=True)
     subprocess.run([str(x) for x in cmd], cwd=str(cwd) if cwd else None, check=True)
-
-
-def init_db(pg_dsn: str):
-    with psycopg.connect(pg_dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute(DDL)
-        conn.commit()
 
 
 def download_qar(mongo_uri: str, mongo_db: str, gridfs_bucket: str, task_id: int, dst_path: pathlib.Path) -> str:
@@ -431,113 +356,50 @@ def parse_defines_svh(defines_path: pathlib.Path):
 
 
 def build_task_parameters(defines: dict):
-    p = {
-        "AXI_DATA_WIDTH": 32,
-        "AXI_ID_W_WIDTH": 5,
-        "AXI_ID_R_WIDTH": 5,
-        "AXI_ADDR_WIDTH": 16,
+    """
+    Return all defines plus derived parameters.
+    No filtering – the upsert function will decide which ones to store.
+    """
+    params = dict(defines)  # start with all defines
 
-        "AXIS_DATA_WIDTH": 40,
-        "AXIS_ID_WIDTH": 3,
-        "AXIS_DEST_WIDTH": 4,
-        "AXIS_USER_WIDTH": 4,
+    # Derived parameters (only if base defines exist)
+    if "MAX_ROUTERS_X" in defines and "MAX_ROUTERS_Y" in defines:
+        routers_x = int(defines["MAX_ROUTERS_X"])
+        routers_y = int(defines["MAX_ROUTERS_Y"])
+        params["ROUTERS_COUNT"] = routers_x * routers_y
+        params["CORE_COUNT"] = routers_x * routers_y
 
-        "AXI_MASTER_LOADER_FIFO_DEPTH": 64,
+    if "AXI_ID_W_WIDTH" in defines and "AXI_ID_R_WIDTH" in defines:
+        params["AXI_MAX_ID_WIDTH"] = max(int(defines["AXI_ID_W_WIDTH"]), int(defines["AXI_ID_R_WIDTH"]))
 
-        "MAX_ROUTERS_X": 4,
-        "MAX_ROUTERS_Y": 4,
+    if "AXI_DATA_WIDTH" in defines:
+        width = int(defines["AXI_DATA_WIDTH"])
+        params["AXI_DATA_BYTES"] = width // 8 + (1 if width % 8 != 0 else 0)
 
-        "BUFFER_DEPTH": 16,
-        "ALGORITHM": "XY",
-    }
-
-    for key in list(p.keys()):
-        if key in defines and defines[key] is not None:
-            p[key] = defines[key]
-
-    p["ROUTERS_COUNT"] = int(p["MAX_ROUTERS_X"]) * int(p["MAX_ROUTERS_Y"])
-    p["CORE_COUNT"] = p["ROUTERS_COUNT"]
-    p["AXI_MAX_ID_WIDTH"] = max(int(p["AXI_ID_W_WIDTH"]), int(p["AXI_ID_R_WIDTH"]))
-    p["AXI_DATA_BYTES"] = int(p["AXI_DATA_WIDTH"]) // 8 + (1 if int(p["AXI_DATA_WIDTH"]) % 8 != 0 else 0)
-
-    return p
+    return params
 
 
 def upsert_task_parameters(pg_dsn: str, task_id: int, params: dict, defines: dict):
-    with psycopg.connect(pg_dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO quartus_task_parameters (
-                    task_id,
-                    axi_data_width,
-                    axi_id_w_width,
-                    axi_id_r_width,
-                    axi_addr_width,
-                    axis_data_width,
-                    axis_id_width,
-                    axis_dest_width,
-                    axis_user_width,
-                    axi_master_loader_fifo_depth,
-                    max_routers_x,
-                    max_routers_y,
-                    buffer_depth,
-                    algorithm,
-                    routers_count,
-                    core_count,
-                    axi_max_id_width,
-                    axi_data_bytes,
-                    defines_json
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s,
-                    %s, %s, %s, %s,
-                    %s, %s,
-                    %s, %s, %s, %s,
-                    %s::jsonb
-                )
-                ON CONFLICT (task_id) DO UPDATE SET
-                    axi_data_width = EXCLUDED.axi_data_width,
-                    axi_id_w_width = EXCLUDED.axi_id_w_width,
-                    axi_id_r_width = EXCLUDED.axi_id_r_width,
-                    axi_addr_width = EXCLUDED.axi_addr_width,
-                    axis_data_width = EXCLUDED.axis_data_width,
-                    axis_id_width = EXCLUDED.axis_id_width,
-                    axis_dest_width = EXCLUDED.axis_dest_width,
-                    axis_user_width = EXCLUDED.axis_user_width,
-                    axi_master_loader_fifo_depth = EXCLUDED.axi_master_loader_fifo_depth,
-                    max_routers_x = EXCLUDED.max_routers_x,
-                    max_routers_y = EXCLUDED.max_routers_y,
-                    buffer_depth = EXCLUDED.buffer_depth,
-                    algorithm = EXCLUDED.algorithm,
-                    routers_count = EXCLUDED.routers_count,
-                    core_count = EXCLUDED.core_count,
-                    axi_max_id_width = EXCLUDED.axi_max_id_width,
-                    axi_data_bytes = EXCLUDED.axi_data_bytes,
-                    defines_json = EXCLUDED.defines_json
-            """, (
-                task_id,
-                params["AXI_DATA_WIDTH"],
-                params["AXI_ID_W_WIDTH"],
-                params["AXI_ID_R_WIDTH"],
-                params["AXI_ADDR_WIDTH"],
-                params["AXIS_DATA_WIDTH"],
-                params["AXIS_ID_WIDTH"],
-                params["AXIS_DEST_WIDTH"],
-                params["AXIS_USER_WIDTH"],
-                params["AXI_MASTER_LOADER_FIFO_DEPTH"],
-                params["MAX_ROUTERS_X"],
-                params["MAX_ROUTERS_Y"],
-                params["BUFFER_DEPTH"],
-                params["ALGORITHM"],
-                params["ROUTERS_COUNT"],
-                params["CORE_COUNT"],
-                params["AXI_MAX_ID_WIDTH"],
-                params["AXI_DATA_BYTES"],
-                json.dumps(defines),
-            ))
-        conn.commit()
+    # params keys are define names like "AXI_DATA_WIDTH"
+    columns = ["task_id", "defines_json"]
+    values = [task_id, json.dumps(defines)]
+
+    for define_key, value in params.items():
+        # Convert to lowercase for the column name
+        col_name = define_key.lower()
+        columns.append(col_name)
+        values.append(value)
+
+    placeholders = ["%s"] * len(values)
+    set_clause = ", ".join(f"{col} = EXCLUDED.{col}" for col in columns if col != "task_id")
+
+    sql = f"""
+        INSERT INTO quartus_task_parameters ({', '.join(columns)})
+        VALUES ({', '.join(placeholders)})
+        ON CONFLICT (task_id) DO UPDATE SET
+            {set_clause}
+    """
+    ...
 
 
 def upsert_postgres(pg_dsn: str, task_id: int, project_name: str, qar_filename: str, reports_json, fmax_json):
@@ -642,11 +504,7 @@ def main():
     ap.add_argument("--extract-fmax-tcl", default="/opt/distributed_computing/mesh_parser/extract_fmax.tcl")
     ap.add_argument("--work-root", default="/tmp/quartus_pipeline")
     ap.add_argument("--keep-workdir", action="store_true")
-    ap.add_argument("--init-db", action="store_true")
     args = ap.parse_args()
-
-    if args.init_db:
-        init_db(args.pg_dsn)
 
     task_id = args.task_id
     workdir = pathlib.Path(args.work_root) / f"task_{task_id}"
